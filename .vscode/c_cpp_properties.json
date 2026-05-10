@@ -1,0 +1,22 @@
+{
+  "configurations": [
+    {
+      "name": "Win32",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "D:/thuvien sdl/SDL2-2.32.0/include",
+        "D:/thuvien sdl/SDL2_ttf-2.24.0/include"
+      ],
+      "libraryPath": [
+        "D:/thuvien sdl/SDL2-2.32.0/lib/x64",
+        "D:/thuvien sdl/SDL2_ttf-2.24.0/lib/x64"
+      ],
+      "defines": ["_DEBUG", "UNICODE", "_UNICODE"],
+      "compilerPath": "C:/msys64/mingw64/bin/g++.exe",
+      "cStandard": "c17",
+      "cppStandard": "c++17",
+      "intelliSenseMode": "windows-gcc-x64"
+    }
+  ],
+  "version": 4
+}
