@@ -69,6 +69,9 @@
 
   <!-- Second file input: merge / add source (avoids replace-all + re-pick same file issues) -->
   <input id="addSourceFile" type="file" accept=".csv,.zip" hidden aria-hidden="true" />
+  
+  <!-- Attach file/image input for chat -->
+  <input id="attachFileInput" type="file" accept="image/*,.pdf,.doc,.docx,.txt" hidden aria-hidden="true" />
 
   <!-- MAIN -->
   <main class="main">
@@ -137,7 +140,7 @@
           data-i18n-placeholder="placeholderInput"
           placeholder="Ask about your loaded data... (Enter to send, Shift+Enter for new line)"></textarea>
         <div class="input-actions">
-          <button class="input-action-btn" data-i18n-title="attachFileTitle" title="Attach file" type="button">
+          <button class="input-action-btn" id="attachBtn" data-i18n-title="attachFileTitle" title="Attach file" type="button">
             <i class="ti ti-paperclip" aria-hidden="true"></i>
           </button>
           <button id="sendBtn" class="send-btn" type="button" data-i18n-title="sendBtnTitle" title="Send">
@@ -145,6 +148,7 @@
           </button>
         </div>
       </div>
+      <div id="attachedFilesContainer" class="attached-files" style="display:none;"></div>
       <div class="input-hint">
         <span data-i18n="placeholderInput">Enter để gửi · Shift+Enter xuống dòng</span>
         <button id="clearBtn" class="clear-btn" type="button">

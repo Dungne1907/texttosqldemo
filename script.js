@@ -12,6 +12,9 @@ const chatArea = document.getElementById("chatArea");
 const inputTextarea = document.getElementById("inputTextarea");
 const sendBtn = document.getElementById("sendBtn");
 const clearBtn = document.getElementById("clearBtn");
+const attachBtn = document.getElementById("attachBtn");
+const attachFileInput = document.getElementById("attachFileInput");
+const attachedFilesContainer = document.getElementById("attachedFilesContainer");
 
 // Sidebar elements
 const dataBtn = document.getElementById("dataBtn");
@@ -37,6 +40,7 @@ const chips = document.querySelectorAll(".chip");
 const API_URL = "http://localhost:5500/api/chat";
 const appData = { users: [], orders: [], products: [] };
 const chatHistory = [];
+const attachedFiles = []; // Lưu các file đã attach
 const PREVIEW_ROWS = 80;
 const MAX_HISTORY_MESSAGES = 14;
 const MAX_SIDEBAR_HISTORY_ITEMS = 12;
@@ -143,6 +147,25 @@ function initApp() {
     // Send and clear buttons
     if (sendBtn) sendBtn.addEventListener("click", sendChat);
     if (clearBtn) clearBtn.addEventListener("click", clearChat);
+
+    // Attach file button
+    if (attachBtn) {
+        attachBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            if (attachFileInput) {
+                attachFileInput.click();
+            }
+        });
+    }
+    if (attachFileInput) {
+        attachFileInput.addEventListener("change", () => {
+            const files = attachFileInput.files;
+            for (let i = 0; i < files.length; i++) {
+                attachFileToChat(files[i]);
+            }
+            attachFileInput.value = "";
+        });
+    }
 
     // Sidebar buttons
     if (dataBtn) dataBtn.addEventListener("click", () => toggleSidebarSection("data"));
@@ -259,6 +282,25 @@ function replaceWorkspaceWithBundle(bundle, label) {
         products: bundle.products || [],
     };
     dataSources = [{ id, label: label || "dataset", data }];
+    activeSourceId = id;
+    appData.users = data.users;
+    appData.orders = data.orders;
+    appData.products = data.products;
+}
+
+/** Thêm dữ liệu mới như một nguồn riêng biệt (không gộp). */
+function addBundleAsNewSource(bundle, label) {
+    const id = crypto.randomUUID();
+    const data = {
+        users: bundle.users || [],
+        orders: bundle.orders || [],
+        products: bundle.products || [],
+    };
+    // Lưu source hiện tại trước khi chuyển
+    persistActiveSource();
+    // Thêm source mới vào danh sách
+    dataSources.push({ id, label: label || "dataset", data });
+    // Tự động kích hoạt source mới để người dùng thấy dữ liệu
     activeSourceId = id;
     appData.users = data.users;
     appData.orders = data.orders;
@@ -770,6 +812,72 @@ function clearChat() {
     updateSidebarHistoryUi();
 }
 
+function getFileIcon(fileName) {
+    const lower = fileName.toLowerCase();
+    if (lower.endsWith(".pdf")) return "ti ti-file-pdf";
+    if (lower.match(/\.(jpg|jpeg|png|gif|webp)$/i)) return "ti ti-photo";
+    if (lower.match(/\.(doc|docx)$/i)) return "ti ti-file-word";
+    if (lower.endsWith(".txt")) return "ti ti-file-text";
+    return "ti ti-file";
+}
+
+function attachFileToChat(file) {
+    if (!file) return;
+    
+    // Check file size (max 10MB)
+    const MAX_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+        showStatus(tf("fileTooLarge", { size: "10MB" }), true);
+        return;
+    }
+    
+    // Add to attached files list
+    attachedFiles.push({ file, name: file.name, size: file.size });
+    renderAttachedFiles();
+    showStatus(tf("fileAttached", { name: file.name }));
+}
+
+function renderAttachedFiles() {
+    if (!attachedFilesContainer) return;
+    
+    if (attachedFiles.length === 0) {
+        attachedFilesContainer.style.display = "none";
+        attachedFilesContainer.innerHTML = "";
+        return;
+    }
+    
+    attachedFilesContainer.style.display = "flex";
+    attachedFilesContainer.innerHTML = "";
+    
+    attachedFiles.forEach((item, idx) => {
+        const div = document.createElement("div");
+        div.className = "attached-file-item";
+        
+        const icon = getFileIcon(item.name);
+        const sizeKB = Math.round(item.size / 1024);
+        
+        div.innerHTML = `
+            <i class="attached-file-icon ${icon}" aria-hidden="true"></i>
+            <span class="attached-file-name" title="${item.name}">${item.name}</span>
+            <span style="font-size:11px;color:var(--text3);">${sizeKB}KB</span>
+            <button class="attached-file-remove" type="button" data-idx="${idx}">
+                <i class="ti ti-x" aria-hidden="true"></i>
+            </button>
+        `;
+        
+        attachedFilesContainer.appendChild(div);
+    });
+    
+    // Add remove handlers
+    document.querySelectorAll(".attached-file-remove").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            const idx = parseInt(e.currentTarget.dataset.idx);
+            attachedFiles.splice(idx, 1);
+            renderAttachedFiles();
+        });
+    });
+}
+
 function showStatus(message, isError = false) {
     // For now, we'll show status in the input hint label
     const hintLabel = document.querySelector(".input-hint span");
@@ -795,6 +903,16 @@ async function handleFileUploadWithFile(file, mode) {
             if (mode === "replace") {
                 replaceWorkspaceWithBundle(r.bundle, file.name);
                 if (r.replaceBubble) appendSystemBubble(r.replaceBubble);
+            } else if (mode === "addSource") {
+                addBundleAsNewSource(r.bundle, file.name);
+                appendSystemBubble(
+                    tf("sourceAddedAsNew", {
+                        name: file.name,
+                        nu: appData.users.length,
+                        no: appData.orders.length,
+                        np: appData.products.length,
+                    })
+                );
             } else {
                 const emptyBefore = !hasData();
                 mergeBundleIntoActiveSource(r.bundle, file.name);
@@ -820,6 +938,17 @@ async function handleFileUploadWithFile(file, mode) {
             if (mode === "replace") {
                 replaceWorkspaceWithBundle(r.bundle, file.name);
                 if (r.replaceBubble) appendSystemBubble(r.replaceBubble);
+            } else if (mode === "addSource") {
+                addBundleAsNewSource(r.bundle, file.name);
+                appendSystemBubble(
+                    tf("sourceAddedAsNew", {
+                        name: file.name,
+                        nu: appData.users.length,
+                        no: appData.orders.length,
+                        np: appData.products.length,
+                    })
+                );
+                showStatus(r.statusText);
             } else {
                 const emptyBefore = !hasData();
                 mergeBundleIntoActiveSource(r.bundle, file.name);
