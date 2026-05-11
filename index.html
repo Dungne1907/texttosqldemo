@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text2SQL Demo</title>
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+    <main class="container">
+        <h1>Text2SQL Demo</h1>
+        <p class="subtitle">Nhap cau hoi tu nhien, sinh SQL va chay tren du lieu CSV/ZIP.</p>
+
+        <section class="upload-box">
+            <h2>1) Nap du lieu</h2>
+            <p class="subtitle-small">Nap 3 file CSV hoac 1 file ZIP chua dataset.</p>
+            <div class="upload-grid">
+                <label>users.csv
+                    <input id="usersFile" type="file" accept=".csv">
+                </label>
+                <label>orders.csv
+                    <input id="ordersFile" type="file" accept=".csv">
+                </label>
+                <label>products.csv
+                    <input id="productsFile" type="file" accept=".csv">
+                </label>
+            </div>
+            <div class="action-row">
+                <button id="loadDataBtn" type="button">Load 3 CSV</button>
+            </div>
+            <div class="zip-inline" style="margin-top: 10px;">
+                <input id="zipFile" type="file" accept=".zip">
+                <button id="loadZipBtn" type="button">Load ZIP</button>
+            </div>
+            <p id="dataStatusText" class="status-text">Chua nap du lieu.</p>
+        </section>
+
+        <section class="examples">
+            <h2>2) Cau hoi mau</h2>
+            <div class="example-list">
+                <button class="example-btn" type="button">Top 5 khach hang co tong chi tieu cao nhat</button>
+                <button class="example-btn" type="button">Doanh thu theo thanh pho trong nam 2004</button>
+                <button class="example-btn" type="button">10 don hang moi nhat</button>
+                <button class="example-btn" type="button">Thong ke san pham theo danh muc</button>
+            </div>
+        </section>
+
+        <section class="input-box">
+            <label for="questionInput">3) Cau hoi cua ban</label>
+            <textarea id="questionInput" placeholder="Vi du: top 3 khach hang co doanh thu cao nhat nam 2005"></textarea>
+            <div class="action-row">
+                <button id="generateBtn" type="button">Generate SQL</button>
+                <button id="runBtn" type="button">Run Query</button>
+            </div>
+            <p id="statusText" class="status-text">San sang.</p>
+        </section>
+
+        <section class="analysis-box">
+            <h2>Phan tich intent/entities</h2>
+            <pre id="analysisOutput">intent: unknown
+confidence: low
+entities.topN: 5
+entities.year: none
+entities.status: none</pre>
+        </section>
+
+        <section class="output-box">
+            <h2>SQL sinh ra</h2>
+            <pre id="sqlOutput">-- SQL se hien thi o day</pre>
+        </section>
+
+        <section class="result-box">
+            <h2>Ket qua</h2>
+            <div id="resultOutput" class="result-output">Chua co ket qua.</div>
+        </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="./script.js"></script>
+</body>
+</html>
