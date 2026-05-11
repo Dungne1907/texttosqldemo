@@ -1,102 +1,166 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Data Chat — Gemini / DeepSeek</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DataChat — Text-to-SQL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Bước 1: ngôn ngữ -->
-    <div id="gateLang" class="gate-screen" role="dialog" aria-labelledby="gateLangTitle">
-        <div class="gate-card gate-card--narrow">
-            <h2 id="gateLangTitle" class="gate-title" data-i18n="gateLangTitle">Chọn ngôn ngữ</h2>
-            <p class="gate-lead" data-i18n="gateLangSubtitle">Chọn Tiếng Việt hoặc English để tiếp tục.</p>
-            <div class="gate-lang-buttons">
-                <button type="button" id="pickLangVi" class="gate-btn gate-btn--primary" data-i18n="langVi">Tiếng Việt</button>
-                <button type="button" id="pickLangEn" class="gate-btn gate-btn--outline" data-i18n="langEn">English</button>
-            </div>
+
+<div class="app">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <a class="logo" href="#">
+      <span class="logo-dot"></span>
+      <span data-i18n="appTitle">DataChat</span>
+    </a>
+    <div class="topbar-spacer"></div>
+    <div class="lang-toggle">
+      <button id="langBtnVi" class="lang-btn active">VI</button>
+      <button id="langBtnEn" class="lang-btn">EN</button>
+    </div>
+    <div class="api-select-wrap">
+      <span class="api-label" data-i18n="apiLabel">API</span>
+      <select id="apiSelect" class="api-select">
+        <option>DeepSeek</option>
+        <option>Gemini</option>
+        <option>Claude</option>
+        <option>GPT-4o</option>
+      </select>
+      <i class="ti ti-chevron-down" style="font-size:13px;color:var(--text3);" aria-hidden="true"></i>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section" data-i18n="sidebarDataSection">Dữ liệu</div>
+    <div id="dataSourcesList" class="data-sources-list"></div>
+    <button id="addSourceBtn" class="sidebar-btn">
+      <i class="ti ti-plus" aria-hidden="true"></i>
+      <span data-i18n="sidebarAddSource">Thêm nguồn dữ liệu</span>
+    </button>
+
+    <div class="sidebar-section" data-i18n="sidebarHistorySection">Lịch sử</div>
+    <div id="historyList"></div>
+    <div id="historyEmpty" class="sidebar-empty" data-i18n="historyEmpty">Chưa có lịch sử chat</div>
+
+    <div class="sidebar-section" style="margin-top:auto; padding-top: 16px;" data-i18n="sidebarSchemaSection">Schema</div>
+    <div id="schemaSidebarEmpty" class="sidebar-empty" data-i18n="schemaSidebarEmpty">Chưa nạp dữ liệu — chưa có bảng.</div>
+    <div id="schemaTables" class="schema-tables" style="display:none;">
+      <button id="schemaUsersBtn" class="sidebar-btn" type="button">
+        <i class="ti ti-table" aria-hidden="true"></i>
+        SinhVien <span id="schemaUsersCount" style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text3)">0 rows</span>
+      </button>
+      <button id="schemaOrdersBtn" class="sidebar-btn" type="button">
+        <i class="ti ti-table" aria-hidden="true"></i>
+        ThanhToan <span id="schemaOrdersCount" style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text3)">0 rows</span>
+      </button>
+      <button id="schemaProductsBtn" class="sidebar-btn" type="button">
+        <i class="ti ti-table" aria-hidden="true"></i>
+        MonHoc <span id="schemaProductsCount" style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text3)">0 rows</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Second file input: merge / add source (avoids replace-all + re-pick same file issues) -->
+  <input id="addSourceFile" type="file" accept=".csv,.zip" hidden aria-hidden="true" />
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- UPLOAD -->
+    <div class="upload-section">
+      <div class="section-header">
+        <span class="section-title">
+          <i class="ti ti-upload" aria-hidden="true"></i>
+          <span data-i18n="uploadTitle">Nạp dữ liệu (CSV / ZIP / SQLite)</span>
+        </span>
+        <button onclick="this.closest('.upload-section').querySelector('.upload-body').classList.toggle('hidden')" 
+                style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;">
+          <i class="ti ti-chevron-down" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="upload-body">
+        <div id="uploadArea" class="upload-area">
+          <input id="uploadFile" type="file" accept=".csv,.zip,.db" />
+          <div class="upload-icon">
+            <i class="ti ti-file-zip" aria-hidden="true"></i>
+          </div>
+          <div class="upload-text">
+            <div class="primary" data-i18n="uploadPrimary">Kéo thả file vào đây hoặc nhấn để chọn</div>
+            <div class="secondary" data-i18n="uploadSecondary">ZIP · CSV · SQLite .db · SQL — tên gợi ý: users / orders / products</div>
+          </div>
+          <button id="uploadBtn" class="upload-cta" type="button" data-i18n="loadDataBtn">Nạp dữ liệu</button>
         </div>
+        <div id="dbStatus" class="db-status" style="display:none;">
+          <i class="ti ti-circle-check-filled" aria-hidden="true"></i>
+          <span id="dbStatusMessage">Đã nạp dữ liệu</span>
+          <div class="db-tags"></div>
+        </div>
+      </div>
     </div>
 
-    <!-- Bước 2: hướng dẫn -->
-    <div id="gateGuide" class="gate-screen hidden" role="dialog" aria-labelledby="gateGuideTitle">
-        <div class="gate-card gate-card--wide">
-            <h2 id="gateGuideTitle" class="gate-title" data-i18n="gateGuideTitle">Hướng dẫn sử dụng</h2>
-            <div class="guide-body">
-                <p data-i18n="gateGuideIntro"></p>
-                <ol class="guide-steps">
-                    <li data-i18n="gateGuideStep1"></li>
-                    <li data-i18n="gateGuideStep2"></li>
-                    <li data-i18n="gateGuideStep3"></li>
-                    <li data-i18n="gateGuideStep4"></li>
-                </ol>
-            </div>
-            <button type="button" id="guideOkBtn" class="gate-btn gate-btn--primary gate-btn--block" data-i18n="gateGuideOk">OK — Vào ứng dụng</button>
+    <!-- CHAT -->
+    <div class="chat-area" id="chatArea">
+
+      <!-- WELCOME + CHIPS -->
+      <div>
+        <div class="chips-label" data-i18n="chipsLabel">Câu hỏi gợi ý</div>
+        <div class="chips">
+          <button class="chip">
+            <i class="ti ti-cash" aria-hidden="true"></i>
+            <span data-i18n="chip1">Tổng học phí đã thu là bao nhiêu?</span>
+          </button>
+          <button class="chip">
+            <i class="ti ti-chart-bar" aria-hidden="true"></i>
+            <span data-i18n="chip2">Doanh thu theo khoa / ngành</span>
+          </button>
+          <button class="chip">
+            <i class="ti ti-users" aria-hidden="true"></i>
+            <span data-i18n="chip3">Số sinh viên chưa đóng học phí</span>
+          </button>
         </div>
+      </div>
+
+      <!-- EXAMPLE CONVERSATION -->
     </div>
 
-    <!-- Trang chính -->
-    <div id="mainApp" class="hidden">
-        <div class="app-wrap">
-            <div class="top-bar">
-                <h1 id="appTitleHeading" data-i18n="appTitle">Data Chat</h1>
-                <div class="top-bar-right">
-                    <div class="lang-switch" role="group" aria-label="" id="langSwitchGroup">
-                        <button type="button" id="langSwitchVi" class="lang-pill" data-lang="vi" aria-pressed="false">VI</button>
-                        <button type="button" id="langSwitchEn" class="lang-pill" data-lang="en" aria-pressed="false">EN</button>
-                    </div>
-                    <div class="provider-row">
-                        <label for="providerSelect" id="apiLabelEl" data-i18n="apiLabel">API:</label>
-                        <select id="providerSelect" aria-label="">
-                            <option value="deepseek">DeepSeek</option>
-                            <option value="gemini">Gemini</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            <p id="hintBox" class="hint-box"></p>
-
-            <div class="chat-app">
-                <button type="button" id="panelToggle" class="panel-toggle" aria-expanded="true">▼ Nạp dữ liệu (CSV / ZIP)</button>
-                <div id="dataPanel" class="data-panel">
-                    <h2 id="dataPanelTitleEl" data-i18n="dataPanelTitle">Dữ liệu của bạn</h2>
-                    <p id="dataPanelSubtitleEl" class="subtitle-small" data-i18n="dataPanelSubtitle"></p>
-                    <div class="toolbar-actions data-upload-row">
-                        <label class="data-file-label"><span id="dataFileLabelEl" data-i18n="fileLabel">CSV hoặc ZIP</span> <input id="dataFile" type="file" accept=".csv,.zip"></label>
-                        <button id="loadDataBtn" type="button" data-i18n="loadDataBtn">Nạp dữ liệu</button>
-                    </div>
-                    <p id="dataStatusText" class="data-status"></p>
-                </div>
-
-                <div id="chatMessages" class="chat-messages" role="log" aria-live="polite"></div>
-
-                <section class="chat-examples" id="examplesSection" aria-label="">
-                    <span id="examplesLabelEl" class="examples-label" data-i18n="examplesLabel">Ví dụ câu hỏi</span>
-                    <div class="example-chips">
-                        <button type="button" class="example-chip" data-i18n="chip1"></button>
-                        <button type="button" class="example-chip" data-i18n="chip2"></button>
-                        <button type="button" class="example-chip" data-i18n="chip3"></button>
-                    </div>
-                </section>
-
-                <footer class="chat-composer">
-                    <label class="sr-only" for="questionInput" id="questionLabelEl" data-i18n="questionAria">Câu hỏi</label>
-                    <textarea id="questionInput" rows="2" placeholder=""></textarea>
-                    <div class="composer-actions">
-                        <button type="button" id="sendBtn" class="btn-send" data-i18n="sendBtn">Gửi</button>
-                        <button type="button" id="clearChatBtn" data-i18n="clearChatBtn">Xóa hội thoại</button>
-                    </div>
-                    <p id="statusText" class="composer-status"></p>
-                </footer>
-            </div>
+    <!-- INPUT BAR -->
+    <div class="input-bar">
+      <div class="input-wrap">
+        <textarea class="input-textarea" id="inputTextarea" rows="1"
+          data-i18n-placeholder="placeholderInput"
+          placeholder="Ask about your loaded data... (Enter to send, Shift+Enter for new line)"></textarea>
+        <div class="input-actions">
+          <button class="input-action-btn" data-i18n-title="attachFileTitle" title="Attach file" type="button">
+            <i class="ti ti-paperclip" aria-hidden="true"></i>
+          </button>
+          <button id="sendBtn" class="send-btn" type="button" data-i18n-title="sendBtnTitle" title="Send">
+            <i class="ti ti-arrow-up" aria-hidden="true"></i>
+          </button>
         </div>
+      </div>
+      <div class="input-hint">
+        <span data-i18n="placeholderInput">Enter để gửi · Shift+Enter xuống dòng</span>
+        <button id="clearBtn" class="clear-btn" type="button">
+          <i class="ti ti-trash" aria-hidden="true"></i>
+          <span data-i18n="clearChatBtn">Xóa hội thoại</span>
+        </button>
+      </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://sql.js.org/dist/sql-wasm.js"></script>
-    <script src="i18n.js"></script>
-    <script src="script.js"></script>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://sql.js.org/dist/sql-wasm.js"></script>
+<script src="i18n.js"></script>
+<script src="script.js"></script>
 </body>
 </html>

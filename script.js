@@ -1,24 +1,46 @@
-const gateLang = document.getElementById("gateLang");
-const gateGuide = document.getElementById("gateGuide");
-const mainApp = document.getElementById("mainApp");
-const pickLangVi = document.getElementById("pickLangVi");
-const pickLangEn = document.getElementById("pickLangEn");
-const guideOkBtn = document.getElementById("guideOkBtn");
-const langSwitchVi = document.getElementById("langSwitchVi");
-const langSwitchEn = document.getElementById("langSwitchEn");
+// Language and UI elements
+const langBtnVi = document.getElementById("langBtnVi");
+const langBtnEn = document.getElementById("langBtnEn");
+const apiSelect = document.getElementById("apiSelect");
 
-const questionInput = document.getElementById("questionInput");
+// Main UI elements
+const uploadArea = document.getElementById("uploadArea");
+const uploadFile = document.getElementById("uploadFile");
+const uploadBtn = document.getElementById("uploadBtn");
+const dbStatus = document.getElementById("dbStatus");
+const chatArea = document.getElementById("chatArea");
+const inputTextarea = document.getElementById("inputTextarea");
 const sendBtn = document.getElementById("sendBtn");
-const clearChatBtn = document.getElementById("clearChatBtn");
-const chatMessages = document.getElementById("chatMessages");
-const providerSelect = document.getElementById("providerSelect");
-const loadDataBtn = document.getElementById("loadDataBtn");
-const dataFile = document.getElementById("dataFile");
-const dataStatusText = document.getElementById("dataStatusText");
-const statusText = document.getElementById("statusText");
-const panelToggle = document.getElementById("panelToggle");
-const dataPanel = document.getElementById("dataPanel");
+const clearBtn = document.getElementById("clearBtn");
+
+// Sidebar elements
+const dataBtn = document.getElementById("dataBtn");
+const historyBtn = document.getElementById("historyBtn");
+const schemaBtn = document.getElementById("schemaBtn");
+const addSourceBtn = document.getElementById("addSourceBtn");
+const addSourceFile = document.getElementById("addSourceFile");
+const historyList = document.getElementById("historyList");
+const historyEmpty = document.getElementById("historyEmpty");
+const schemaSidebarEmpty = document.getElementById("schemaSidebarEmpty");
+const schemaTables = document.getElementById("schemaTables");
+const schemaUsersBtn = document.getElementById("schemaUsersBtn");
+const schemaOrdersBtn = document.getElementById("schemaOrdersBtn");
+const schemaProductsBtn = document.getElementById("schemaProductsBtn");
+const schemaUsersCount = document.getElementById("schemaUsersCount");
+const schemaOrdersCount = document.getElementById("schemaOrdersCount");
+const schemaProductsCount = document.getElementById("schemaProductsCount");
+
+// Quick chips
+const chips = document.querySelectorAll(".chip");
+
+// API and data
 const API_URL = "http://localhost:5500/api/chat";
+const appData = { users: [], orders: [], products: [] };
+const chatHistory = [];
+const PREVIEW_ROWS = 80;
+const MAX_HISTORY_MESSAGES = 14;
+const MAX_SIDEBAR_HISTORY_ITEMS = 12;
+const sidebarHistoryItems = [];
 
 function applyLocale() {
     const lang = getLang();
@@ -30,77 +52,333 @@ function applyLocale() {
         if (!key) return;
         el.textContent = t(key);
     });
+    document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+        const key = el.getAttribute("data-i18n-title");
+        if (!key) return;
+        el.title = t(key);
+    });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+        const key = el.getAttribute("data-i18n-placeholder");
+        if (!key) return;
+        el.placeholder = t(key);
+    });
 
-    const hintEl = document.getElementById("hintBox");
-    if (hintEl) hintEl.innerHTML = t("hintBoxHtml");
+    inputTextarea.placeholder = t("placeholderInput");
+    apiSelect.setAttribute("aria-label", t("providerAria"));
+    if (historyEmpty) historyEmpty.textContent = t("historyEmpty");
 
-    questionInput.placeholder = t("placeholderInput");
-    providerSelect.setAttribute("aria-label", t("providerAria"));
-    const exSec = document.getElementById("examplesSection");
-    if (exSec) exSec.setAttribute("aria-label", t("examplesAria"));
-    const ls = document.getElementById("langSwitchGroup");
-    if (ls) ls.setAttribute("aria-label", t("langSwitchAria"));
-
-    refreshLangSwitch();
-    updatePanelToggleLabel();
+    refreshLangButtons();
 }
 
-function refreshLangSwitch() {
+function refreshLangButtons() {
     const lang = getLang();
-    langSwitchVi.classList.toggle("is-active", lang === "vi");
-    langSwitchVi.setAttribute("aria-pressed", lang === "vi" ? "true" : "false");
-    langSwitchEn.classList.toggle("is-active", lang === "en");
-    langSwitchEn.setAttribute("aria-pressed", lang === "en" ? "true" : "false");
+    langBtnVi.classList.toggle("active", lang === "vi");
+    langBtnEn.classList.toggle("active", lang === "en");
 }
 
-function updatePanelToggleLabel() {
-    const open = !dataPanel.classList.contains("hidden");
-    panelToggle.textContent = open ? t("panelToggleOpen") : t("panelToggleShut");
-}
+function initApp() {
+    const openFilePicker = () => {
+        uploadFile?.click();
+    };
+    const goToUploadSection = () => {
+        uploadArea?.scrollIntoView({ behavior: "smooth", block: "center" });
+    };
 
-function initGateAndLocale() {
-    pickLangVi.addEventListener("click", () => {
-        setLang("vi");
-        applyLocale();
-        gateLang.classList.add("hidden");
-        gateGuide.classList.remove("hidden");
-    });
-    pickLangEn.addEventListener("click", () => {
-        setLang("en");
-        applyLocale();
-        gateLang.classList.add("hidden");
-        gateGuide.classList.remove("hidden");
-    });
-    guideOkBtn.addEventListener("click", () => {
-        setGatePassed();
-        gateGuide.classList.add("hidden");
-        mainApp.classList.remove("hidden");
-        applyLocale();
-        if (!hasWelcomeShown()) {
-            appendSystemBubble(t("welcomeSystem"));
-            setWelcomeShown();
-        }
-    });
-    langSwitchVi.addEventListener("click", () => {
+    // Language buttons
+    langBtnVi.addEventListener("click", () => {
         setLang("vi");
         applyLocale();
     });
-    langSwitchEn.addEventListener("click", () => {
+    langBtnEn.addEventListener("click", () => {
         setLang("en");
         applyLocale();
     });
 
-    // Always start from language selection on page load
+    // Upload functionality
+    if (uploadArea) {
+        uploadArea.addEventListener("click", (e) => {
+            const target = e.target;
+            if (target instanceof HTMLElement && (target.closest("#uploadBtn") || target.closest("#uploadFile"))) {
+                return;
+            }
+            openFilePicker();
+        });
+    }
+    if (uploadBtn) {
+        uploadBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openFilePicker();
+        });
+    }
+    if (uploadFile) {
+        uploadFile.addEventListener("change", () => handleFileUploadFromInput(uploadFile, "replace"));
+    }
+    if (addSourceFile) {
+        addSourceFile.addEventListener("change", () => handleFileUploadFromInput(addSourceFile, "addSource"));
+    }
+    if (addSourceBtn) {
+        addSourceBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            goToUploadSection();
+            if (addSourceFile) {
+                addSourceFile.value = "";
+                addSourceFile.click();
+            } else {
+                openFilePicker();
+            }
+        });
+    }
+
+    // Input functionality
+    if (inputTextarea) {
+        inputTextarea.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendChat();
+            }
+        });
+    }
+
+    // Send and clear buttons
+    if (sendBtn) sendBtn.addEventListener("click", sendChat);
+    if (clearBtn) clearBtn.addEventListener("click", clearChat);
+
+    // Sidebar buttons
+    if (dataBtn) dataBtn.addEventListener("click", () => toggleSidebarSection("data"));
+    if (historyBtn) historyBtn.addEventListener("click", () => toggleSidebarSection("history"));
+    if (schemaBtn) schemaBtn.addEventListener("click", () => toggleSidebarSection("schema"));
+    if (schemaUsersBtn) schemaUsersBtn.addEventListener("click", () => handleSchemaTableClick("users", "SinhVien"));
+    if (schemaOrdersBtn) schemaOrdersBtn.addEventListener("click", () => handleSchemaTableClick("orders", "ThanhToan"));
+    if (schemaProductsBtn) schemaProductsBtn.addEventListener("click", () => handleSchemaTableClick("products", "MonHoc"));
+
+    // Quick chips
+    chips.forEach(chip => {
+        chip.addEventListener("click", () => {
+            inputTextarea.value = chip.textContent || "";
+            sendChat();
+        });
+    });
+
+    // Initialize locale
     applyLocale();
+    updateDbStatus();
+
+    // Show welcome message
+    if (!hasWelcomeShown()) {
+        appendSystemBubble(t("welcomeSystem"));
+        setWelcomeShown();
+    }
 }
 
-const appData = { users: [], orders: [], products: [] };
-const chatHistory = [];
-const PREVIEW_ROWS = 80;
-const MAX_HISTORY_MESSAGES = 14;
+function toggleSidebarSection(section) {
+    // Remove active class from all buttons
+    document.querySelectorAll(".sidebar-btn").forEach(btn => btn.classList.remove("active"));
+
+    // Add active class to clicked button
+    const btn = document.getElementById(`${section}Btn`);
+    if (btn) btn.classList.add("active");
+
+    // Here you could implement showing different sidebar content
+    // For now, just update the active state
+}
+
+function updateSidebarHistoryUi() {
+    if (!historyList || !historyEmpty) return;
+    historyList.innerHTML = "";
+    for (const title of sidebarHistoryItems) {
+        const btn = document.createElement("button");
+        btn.className = "sidebar-btn";
+        btn.type = "button";
+        btn.innerHTML = `
+            <i class="ti ti-message" aria-hidden="true"></i>
+            <span>${escapeHtml(title)}</span>
+        `;
+        historyList.appendChild(btn);
+    }
+    historyEmpty.style.display = sidebarHistoryItems.length ? "none" : "block";
+}
+
+function addSidebarHistoryItem(text) {
+    const title = String(text || "").trim();
+    if (!title) return;
+    sidebarHistoryItems.unshift(title);
+    if (sidebarHistoryItems.length > MAX_SIDEBAR_HISTORY_ITEMS) {
+        sidebarHistoryItems.length = MAX_SIDEBAR_HISTORY_ITEMS;
+    }
+    updateSidebarHistoryUi();
+}
+
 
 function hasData() {
     return appData.users.length > 0 || appData.orders.length > 0 || appData.products.length > 0;
+}
+
+/** Danh sách nguồn (đổi nguồn bằng cách bấm tên file). «Thêm nguồn» gộp vào nguồn đang live. */
+let dataSources = [];
+let activeSourceId = null;
+
+function persistActiveSource() {
+    if (!activeSourceId) return;
+    const s = dataSources.find((x) => x.id === activeSourceId);
+    if (s) {
+        s.data.users = appData.users;
+        s.data.orders = appData.orders;
+        s.data.products = appData.products;
+    }
+}
+
+function syncAppDataFromSourceEntry(entry) {
+    if (!entry) {
+        appData.users = [];
+        appData.orders = [];
+        appData.products = [];
+        return;
+    }
+    appData.users = entry.data.users;
+    appData.orders = entry.data.orders;
+    appData.products = entry.data.products;
+}
+
+function activateDataSource(id) {
+    persistActiveSource();
+    activeSourceId = id;
+    const entry = dataSources.find((x) => x.id === id);
+    syncAppDataFromSourceEntry(entry || null);
+    updateDbStatus();
+    if (entry) {
+        showStatus(tf("sourceSwitched", { name: entry.label }));
+    }
+}
+
+function replaceWorkspaceWithBundle(bundle, label) {
+    const id = crypto.randomUUID();
+    const data = {
+        users: bundle.users || [],
+        orders: bundle.orders || [],
+        products: bundle.products || [],
+    };
+    dataSources = [{ id, label: label || "dataset", data }];
+    activeSourceId = id;
+    appData.users = data.users;
+    appData.orders = data.orders;
+    appData.products = data.products;
+}
+
+/** Hợp tất cả tên cột của hai tập dòng, mỗi dòng có đủ cột (thiếu → ""), tránh “mất” giá trị khi hai file khác schema. */
+function collectRowKeys(rows) {
+    const keys = new Set();
+    for (const r of rows) {
+        if (r && typeof r === "object") {
+            for (const k of Object.keys(r)) keys.add(k);
+        }
+    }
+    return keys;
+}
+
+function normalizeRowToKeyList(row, keyList) {
+    const base = row && typeof row === "object" ? row : {};
+    const o = {};
+    for (const k of keyList) {
+        const v = base[k];
+        o[k] = v == null ? "" : typeof v === "bigint" ? String(v) : String(v);
+    }
+    return o;
+}
+
+function mergeTableRowsUnionColumns(existing, incoming) {
+    const a = Array.isArray(existing) ? existing : [];
+    const b = Array.isArray(incoming) ? incoming : [];
+    if (!b.length) return a.slice();
+    const keyList = [...new Set([...collectRowKeys(a), ...collectRowKeys(b)])];
+    if (!a.length) return b.map((r) => normalizeRowToKeyList(r, keyList));
+    return [...a.map((r) => normalizeRowToKeyList(r, keyList)), ...b.map((r) => normalizeRowToKeyList(r, keyList))];
+}
+
+/** Gộp file mới vào nguồn đang chọn (cùng SinhVien / ThanhToan / MonHoc). Nếu chưa có dữ liệu thì tương đương nạp mới. */
+function mergeBundleIntoActiveSource(bundle, fileLabel) {
+    const u = bundle.users || [];
+    const o = bundle.orders || [];
+    const p = bundle.products || [];
+    if (!hasData() || !activeSourceId || !dataSources.length) {
+        replaceWorkspaceWithBundle(bundle, fileLabel);
+        return;
+    }
+    appData.users = mergeTableRowsUnionColumns(appData.users, u);
+    appData.orders = mergeTableRowsUnionColumns(appData.orders, o);
+    appData.products = mergeTableRowsUnionColumns(appData.products, p);
+    persistActiveSource();
+    const entry = dataSources.find((x) => x.id === activeSourceId);
+    if (entry && fileLabel) {
+        const tail = fileLabel.length > 14 ? `${fileLabel.slice(0, 11)}…` : fileLabel;
+        if (!entry.label.includes(tail.slice(0, 8))) {
+            const next = `${entry.label} + ${tail}`;
+            entry.label = next.length > 48 ? `${next.slice(0, 45)}…` : next;
+        }
+    }
+}
+
+function renderDataSourcesList() {
+    const el = document.getElementById("dataSourcesList");
+    if (!el) return;
+    el.innerHTML = "";
+    for (const s of dataSources) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `sidebar-btn${s.id === activeSourceId ? " active" : ""}`;
+        const short = s.label.length > 22 ? `${s.label.slice(0, 19)}…` : s.label;
+        btn.innerHTML = `
+            <i class="ti ti-database" aria-hidden="true"></i>
+            <span>${escapeHtml(short)}</span>
+            ${s.id === activeSourceId ? '<span class="schema-badge">live</span>' : ""}
+        `;
+        btn.addEventListener("click", () => activateDataSource(s.id));
+        el.appendChild(btn);
+    }
+}
+
+function updateSchemaSidebarVisibility() {
+    if (schemaSidebarEmpty) {
+        schemaSidebarEmpty.textContent = t("schemaSidebarEmpty");
+        schemaSidebarEmpty.style.display = hasData() ? "none" : "block";
+    }
+    if (schemaTables) {
+        schemaTables.style.display = hasData() ? "flex" : "none";
+    }
+}
+
+function updateSchemaCounts() {
+    if (schemaUsersCount) schemaUsersCount.textContent = `${appData.users.length} rows`;
+    if (schemaOrdersCount) schemaOrdersCount.textContent = `${appData.orders.length} rows`;
+    if (schemaProductsCount) schemaProductsCount.textContent = `${appData.products.length} rows`;
+}
+
+function handleSchemaTableClick(role, tableLabel) {
+    const rows = Array.isArray(appData[role]) ? appData[role] : [];
+    if (!rows.length) {
+        showStatus(tf("schemaNoData", { table: tableLabel }), true);
+        return;
+    }
+    const cols = Object.keys(rows[0] || {});
+    const previewRows = rows.slice(0, 8);
+    const headerHtml = cols.map((c) => `<th>${escapeHtml(c)}</th>`).join("");
+    const bodyHtml = previewRows
+        .map((r) => {
+            const tds = cols.map((c) => `<td>${escapeHtml(r[c] ?? "")}</td>`).join("");
+            return `<tr>${tds}</tr>`;
+        })
+        .join("");
+    const tableHtml = `
+        <p><strong>${escapeHtml(tableLabel)}</strong> · ${rows.length} rows</p>
+        <div class="result-table-wrap">
+            <table class="result-table">
+                <thead><tr>${headerHtml}</tr></thead>
+                <tbody>${bodyHtml}</tbody>
+            </table>
+        </div>
+    `;
+    appendAssistantBubble(tableHtml);
+    showStatus(tf("schemaPreview", { table: tableLabel, rows: rows.length, cols: cols.slice(0, 6).join(", ") || "(no columns)" }));
 }
 
 function missingTableLabels() {
@@ -288,7 +566,7 @@ function selectThreeSqliteTableNames(tableNames) {
     return null;
 }
 
-async function tryLoadSqliteFromZipBuffer(arrayBuffer) {
+async function readSqliteBundleFromBuffer(arrayBuffer) {
     const SQL = await loadSqlJsModule();
     const db = new SQL.Database(new Uint8Array(arrayBuffer));
     try {
@@ -302,11 +580,11 @@ async function tryLoadSqliteFromZipBuffer(arrayBuffer) {
             db.close();
             return null;
         }
-        appData.users = sqliteSelectAllObjects(db, map.usersTable);
-        appData.orders = sqliteSelectAllObjects(db, map.ordersTable);
-        appData.products = sqliteSelectAllObjects(db, map.productsTable);
+        const users = sqliteSelectAllObjects(db, map.usersTable);
+        const orders = sqliteSelectAllObjects(db, map.ordersTable);
+        const products = sqliteSelectAllObjects(db, map.productsTable);
         db.close();
-        return map;
+        return { bundle: { users, orders, products }, map };
     } catch (e) {
         try {
             db.close();
@@ -317,71 +595,97 @@ async function tryLoadSqliteFromZipBuffer(arrayBuffer) {
     }
 }
 
-function setStatus(message, isError = false) {
-    statusText.textContent = message;
-    statusText.classList.toggle("error", isError);
+function setDataStatus(message, isError = false) {
+    const statusEl = document.getElementById("dbStatusMessage");
+    if (statusEl) {
+        statusEl.textContent = message;
+        statusEl.classList.toggle("error", isError);
+    }
+    if (dbStatus) {
+        dbStatus.style.display = message ? "flex" : "none";
+    }
 }
 
-function setDataStatus(message, isError = false) {
-    dataStatusText.textContent = message;
-    dataStatusText.classList.toggle("error", isError);
+function updateDbStatus() {
+    updateSchemaCounts();
+    updateSchemaSidebarVisibility();
+    renderDataSourcesList();
+    if (!hasData()) {
+        if (dbStatus) dbStatus.style.display = "none";
+        return;
+    }
+
+    if (dbStatus) {
+        dbStatus.style.display = "flex";
+        dbStatus.style.alignItems = "center";
+    }
+    const tags = dbStatus.querySelector(".db-tags");
+    if (tags) {
+        tags.innerHTML = `
+            <span class="db-tag">Users: ${appData.users.length}</span>
+            <span class="db-tag">Orders: ${appData.orders.length}</span>
+            <span class="db-tag">Products: ${appData.products.length}</span>
+        `;
+    }
+    const messageEl = document.getElementById("dbStatusMessage");
+    const loadedCount = [appData.users.length, appData.orders.length, appData.products.length].filter((v) => v > 0).length;
+    if (messageEl) {
+        messageEl.textContent = tf("dataLoadedCount", { count: loadedCount });
+    }
+    if (tags) {
+        tags.innerHTML = `
+            <span class="db-tag">${t("dbTagUsers")}: ${appData.users.length}</span>
+            <span class="db-tag">${t("dbTagOrders")}: ${appData.orders.length}</span>
+            <span class="db-tag">${t("dbTagProducts")}: ${appData.products.length}</span>
+        `;
+    }
 }
 
 function scrollChat() {
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-function escapeHtml(value) {
-    return String(value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#39;");
-}
-
-function renderAssistantHtml(text) {
-    const raw = String(text || "");
-    if (typeof marked !== "undefined") {
-        try {
-            marked.setOptions({ mangle: false, headerIds: false, breaks: true });
-            return marked.parse(raw);
-        } catch {
-            /* fall through */
-        }
-    }
-    return `<p>${escapeHtml(raw).replace(/\n/g, "<br>")}</p>`;
+    chatArea.scrollTop = chatArea.scrollHeight;
 }
 
 function appendUserBubble(text) {
-    const wrap = document.createElement("div");
-    wrap.className = "msg msg-user";
-    wrap.innerHTML = `<div class="msg-body">${escapeHtml(text)}</div>`;
-    chatMessages.appendChild(wrap);
+    const msgDiv = document.createElement("div");
+    msgDiv.className = "msg user";
+    msgDiv.innerHTML = `
+        <div class="msg-avatar">U</div>
+        <div class="msg-bubble">${escapeHtml(text)}</div>
+    `;
+    chatArea.appendChild(msgDiv);
     scrollChat();
 }
 
 function appendAssistantBubble(html) {
-    const wrap = document.createElement("div");
-    wrap.className = "msg msg-assistant";
-    wrap.innerHTML = `<div class="msg-body">${html}</div>`;
-    chatMessages.appendChild(wrap);
+    const msgDiv = document.createElement("div");
+    msgDiv.className = "msg bot";
+    msgDiv.innerHTML = `
+        <div class="msg-avatar"><i class="ti ti-robot"></i></div>
+        <div class="msg-bubble">${html}</div>
+    `;
+    chatArea.appendChild(msgDiv);
     scrollChat();
 }
 
 function appendErrorBubble(message) {
-    const wrap = document.createElement("div");
-    wrap.className = "msg msg-assistant msg-error";
-    wrap.innerHTML = `<div class="msg-body">${escapeHtml(message)}</div>`;
-    chatMessages.appendChild(wrap);
+    const msgDiv = document.createElement("div");
+    msgDiv.className = "msg bot";
+    msgDiv.innerHTML = `
+        <div class="msg-avatar"><i class="ti ti-alert-triangle"></i></div>
+        <div class="msg-bubble" style="background: #fee2e2; color: #dc2626; border-color: #fecaca;">${escapeHtml(message)}</div>
+    `;
+    chatArea.appendChild(msgDiv);
     scrollChat();
 }
 
 function appendSystemBubble(text) {
-    const wrap = document.createElement("div");
-    wrap.className = "msg msg-system";
-    wrap.innerHTML = `<div class="msg-body">${escapeHtml(text)}</div>`;
-    chatMessages.appendChild(wrap);
+    const msgDiv = document.createElement("div");
+    msgDiv.className = "msg bot";
+    msgDiv.innerHTML = `
+        <div class="msg-avatar"><i class="ti ti-info-circle"></i></div>
+        <div class="msg-bubble" style="background: var(--surface); border: 1px solid var(--border); font-style: italic;">${escapeHtml(text)}</div>
+    `;
+    chatArea.appendChild(msgDiv);
     scrollChat();
 }
 
@@ -406,30 +710,31 @@ function trimHistory() {
 }
 
 async function sendChat() {
-    const text = questionInput.value.trim();
+    const text = inputTextarea.value.trim();
     if (!text) {
-        setStatus(t("statusEmptyQuestion"), true);
+        showStatus(t("statusEmptyQuestion"), true);
         return;
     }
     if (!hasData()) {
-        setStatus(t("statusNoData"), true);
+        showStatus(t("statusNoData"), true);
         return;
     }
 
     appendUserBubble(text);
-    questionInput.value = "";
+    inputTextarea.value = "";
     chatHistory.push({ role: "user", content: text });
     trimHistory();
+    addSidebarHistoryItem(text);
 
     sendBtn.disabled = true;
-    setStatus(t("statusCallingApi"));
+    showStatus(t("statusCallingApi"));
 
     try {
         const res = await fetch(API_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                provider: providerSelect.value,
+                provider: apiSelect.value,
                 messages: chatHistory.map((m) => ({ role: m.role, content: m.content })),
                 dataset: buildDatasetForApi(),
             }),
@@ -445,11 +750,11 @@ async function sendChat() {
         appendAssistantBubble(renderAssistantHtml(reply));
         chatHistory.push({ role: "assistant", content: reply });
         trimHistory();
-        setStatus(t("statusDone"));
+        showStatus(t("statusDone"));
     } catch (err) {
         const msg = err.message || String(err);
         appendErrorBubble(msg);
-        setStatus(msg, true);
+        showStatus(msg, true);
     } finally {
         sendBtn.disabled = false;
         scrollChat();
@@ -458,9 +763,98 @@ async function sendChat() {
 
 function clearChat() {
     chatHistory.length = 0;
-    chatMessages.innerHTML = "";
-    setStatus("");
+    chatArea.innerHTML = "";
+    showStatus("");
     appendSystemBubble(t("clearChatSystem"));
+    sidebarHistoryItems.length = 0;
+    updateSidebarHistoryUi();
+}
+
+function showStatus(message, isError = false) {
+    // For now, we'll show status in the input hint label
+    const hintLabel = document.querySelector(".input-hint span");
+    if (hintLabel) {
+        hintLabel.textContent = message || "Enter để gửi · Shift+Enter xuống dòng";
+        hintLabel.style.color = isError ? "#dc2626" : "var(--text3)";
+    }
+}
+
+async function handleFileUploadWithFile(file, mode) {
+    if (!file) return;
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith(".zip") && !lower.endsWith(".csv")) {
+        showStatus(t("invalidExtension"), true);
+        return;
+    }
+
+    showStatus(t("statusLoadingData"));
+    try {
+        if (lower.endsWith(".zip")) {
+            const r = await extractZipBundle(file);
+            if (!r.ok) return;
+            if (mode === "replace") {
+                replaceWorkspaceWithBundle(r.bundle, file.name);
+                if (r.replaceBubble) appendSystemBubble(r.replaceBubble);
+            } else {
+                const emptyBefore = !hasData();
+                mergeBundleIntoActiveSource(r.bundle, file.name);
+                if (emptyBefore && r.replaceBubble) {
+                    appendSystemBubble(r.replaceBubble);
+                } else if (!emptyBefore) {
+                    appendSystemBubble(
+                        tf("sourceMergedInto", {
+                            name: file.name,
+                            nu: appData.users.length,
+                            no: appData.orders.length,
+                            np: appData.products.length,
+                        })
+                    );
+                }
+            }
+        } else {
+            const r = await csvFileToBundle(file);
+            if (!r.ok) {
+                if (r.reason === "hint") showStatus(t("csvFilenameHint"), true);
+                return;
+            }
+            if (mode === "replace") {
+                replaceWorkspaceWithBundle(r.bundle, file.name);
+                if (r.replaceBubble) appendSystemBubble(r.replaceBubble);
+            } else {
+                const emptyBefore = !hasData();
+                mergeBundleIntoActiveSource(r.bundle, file.name);
+                if (emptyBefore) {
+                    if (r.replaceBubble) appendSystemBubble(r.replaceBubble);
+                    showStatus(r.statusText);
+                } else {
+                    appendSystemBubble(
+                        tf("sourceMergedInto", {
+                            name: file.name,
+                            nu: appData.users.length,
+                            no: appData.orders.length,
+                            np: appData.products.length,
+                        })
+                    );
+                }
+            }
+            if (mode === "replace") {
+                showStatus(r.statusText);
+            }
+        }
+        updateDbStatus();
+        if (hasData()) {
+            showStatus(t("statusReadyChat"));
+        }
+    } catch (error) {
+        showStatus(tf("readError", { msg: error.message }), true);
+    }
+}
+
+async function handleFileUploadFromInput(input, mode) {
+    const file = input?.files?.[0];
+    if (!file) return;
+    await handleFileUploadWithFile(file, mode);
+    if (input) input.value = "";
 }
 
 function parseCsvText(text) {
@@ -477,32 +871,29 @@ function parseCsvText(text) {
     });
 }
 
-async function loadSingleCsvFile(file) {
+async function csvFileToBundle(file) {
     const role = inferCsvRole(file.name);
     if (!role) {
-        setDataStatus(t("csvFilenameHint"), true);
-        return;
+        return { ok: false, reason: "hint" };
     }
     const text = await file.text();
     const rows = parseCsvText(text);
-    appData[role] = rows;
-    const miss = missingTableLabels();
-    const s =
+    const bundle = { users: [], orders: [], products: [] };
+    bundle[role] = rows;
+    const miss = [];
+    if (!bundle.users.length) miss.push("users");
+    if (!bundle.orders.length) miss.push("orders");
+    if (!bundle.products.length) miss.push("products");
+    const statusText =
         miss.length === 0
             ? tf("csvFull", {
                   role,
-                  nu: appData.users.length,
-                  no: appData.orders.length,
-                  np: appData.products.length,
+                  nu: bundle.users.length,
+                  no: bundle.orders.length,
+                  np: bundle.products.length,
               })
             : tf("csvPartial", { role, rows: rows.length, miss: miss.join(", ") });
-    setDataStatus(s);
-    if (miss.length === 0) {
-        appendSystemBubble(s);
-    }
-    if (rows.length > 0) {
-        setStatus(t("statusReadyChat"));
-    }
+    return { ok: true, bundle, statusText, replaceBubble: miss.length === 0 ? statusText : null };
 }
 
 function stripQuotes(value) {
@@ -590,67 +981,69 @@ function parseInsertRows(sqlText, tableName) {
     return rows;
 }
 
-function mapClassicModels(sqlText) {
+function buildClassicModelsData(sqlText) {
     const customers = parseInsertRows(sqlText, "customers");
     const payments = parseInsertRows(sqlText, "payments");
     const products = parseInsertRows(sqlText, "products");
     if (!customers.length || !payments.length || !products.length) return null;
 
-    appData.users = customers.map((c) => ({
-        id: c.customerNumber,
-        name: c.customerName,
-        city: c.city,
-        created_at: new Date().toISOString(),
-    }));
-    appData.orders = payments.map((p, idx) => ({
-        id: idx + 1,
-        user_id: p.customerNumber,
-        amount: p.amount,
-        status: "delivered",
-        created_at: p.paymentDate,
-    }));
-    appData.products = products.map((p) => ({
-        id: p.productCode,
-        name: p.productName,
-        category: p.productLine || "General",
-        price: p.buyPrice || 0,
-    }));
-    return "classicmodels";
+    return {
+        users: customers.map((c) => ({
+            id: c.customerNumber,
+            name: c.customerName,
+            city: c.city,
+            created_at: new Date().toISOString(),
+        })),
+        orders: payments.map((p, idx) => ({
+            id: idx + 1,
+            user_id: p.customerNumber,
+            amount: p.amount,
+            status: "delivered",
+            created_at: p.paymentDate,
+        })),
+        products: products.map((p) => ({
+            id: p.productCode,
+            name: p.productName,
+            category: p.productLine || "General",
+            price: p.buyPrice || 0,
+        })),
+    };
 }
 
-function mapSakila(sqlText) {
+function buildSakilaData(sqlText) {
     const customers = parseInsertRows(sqlText, "customer");
     const payments = parseInsertRows(sqlText, "payment");
     const films = parseInsertRows(sqlText, "film");
     if (!customers.length || !payments.length || !films.length) return null;
 
-    appData.users = customers.map((c) => ({
-        id: c.customer_id,
-        name: `${c.first_name || ""} ${c.last_name || ""}`.trim() || `Customer ${c.customer_id}`,
-        city: "Unknown",
-        created_at: c.create_date || new Date().toISOString(),
-    }));
-    appData.orders = payments.map((p) => ({
-        id: p.payment_id,
-        user_id: p.customer_id,
-        amount: p.amount,
-        status: "delivered",
-        created_at: p.payment_date,
-    }));
-    appData.products = films.map((f) => ({
-        id: f.film_id,
-        name: f.title,
-        category: f.rating || "General",
-        price: f.replacement_cost || 0,
-    }));
-    return "sakila";
+    return {
+        users: customers.map((c) => ({
+            id: c.customer_id,
+            name: `${c.first_name || ""} ${c.last_name || ""}`.trim() || `Customer ${c.customer_id}`,
+            city: "Unknown",
+            created_at: c.create_date || new Date().toISOString(),
+        })),
+        orders: payments.map((p) => ({
+            id: p.payment_id,
+            user_id: p.customer_id,
+            amount: p.amount,
+            status: "delivered",
+            created_at: p.payment_date,
+        })),
+        products: films.map((f) => ({
+            id: f.film_id,
+            name: f.title,
+            category: f.rating || "General",
+            price: f.replacement_cost || 0,
+        })),
+    };
 }
 
-async function loadDataFromZipFile(file) {
+async function extractZipBundle(file) {
     try {
         if (typeof window.JSZip === "undefined") {
             setDataStatus(t("zipJsZipFail"), true);
-            return;
+            return { ok: false };
         }
 
         const zip = await window.JSZip.loadAsync(await file.arrayBuffer());
@@ -660,18 +1053,16 @@ async function loadDataFromZipFile(file) {
         if (csvEntries.length >= 3) {
             const triple = resolveZipCsvTriple(csvEntries);
             if (triple) {
-                appData.users = parseCsvText(await triple.users.async("string"));
-                appData.orders = parseCsvText(await triple.orders.async("string"));
-                appData.products = parseCsvText(await triple.products.async("string"));
-                const s = tf("zipLoadedCsv", {
-                    nu: appData.users.length,
-                    no: appData.orders.length,
-                    np: appData.products.length,
+                const users = parseCsvText(await triple.users.async("string"));
+                const orders = parseCsvText(await triple.orders.async("string"));
+                const products = parseCsvText(await triple.products.async("string"));
+                const bundle = { users, orders, products };
+                const replaceBubble = tf("zipLoadedCsv", {
+                    nu: bundle.users.length,
+                    no: bundle.orders.length,
+                    np: bundle.products.length,
                 });
-                setDataStatus(s);
-                appendSystemBubble(s);
-                setStatus(t("statusReadyChat"));
-                return;
+                return { ok: true, bundle, replaceBubble };
             }
         }
 
@@ -679,20 +1070,18 @@ async function loadDataFromZipFile(file) {
         for (const dbEntry of dbEntries) {
             try {
                 const buf = await dbEntry.async("arraybuffer");
-                const map = await tryLoadSqliteFromZipBuffer(buf);
-                if (map && hasData()) {
-                    const s = tf("zipLoadedSqlite", {
-                        tu: map.usersTable,
-                        to: map.ordersTable,
-                        tp: map.productsTable,
-                        nu: appData.users.length,
-                        no: appData.orders.length,
-                        np: appData.products.length,
+                const sqlite = await readSqliteBundleFromBuffer(buf);
+                if (sqlite?.bundle) {
+                    const b = sqlite.bundle;
+                    const replaceBubble = tf("zipLoadedSqlite", {
+                        tu: sqlite.map.usersTable,
+                        to: sqlite.map.ordersTable,
+                        tp: sqlite.map.productsTable,
+                        nu: b.users.length,
+                        no: b.orders.length,
+                        np: b.products.length,
                     });
-                    setDataStatus(s);
-                    appendSystemBubble(s);
-                    setStatus(t("statusReadyChat"));
-                    return;
+                    return { ok: true, bundle: b, replaceBubble };
                 }
             } catch (_) {
                 /* thử file .db khác hoặc định dạng khác */
@@ -702,86 +1091,68 @@ async function loadDataFromZipFile(file) {
         const sqlEntries = entries.filter((entry) => entry.name.toLowerCase().endsWith(".sql"));
         for (const sqlEntry of sqlEntries) {
             const sqlText = await sqlEntry.async("string");
-            const c = mapClassicModels(sqlText);
-            if (c) {
-                const s = tf("zipMappedClassic", {
-                    nu: appData.users.length,
-                    no: appData.orders.length,
-                    np: appData.products.length,
+            const classic = buildClassicModelsData(sqlText);
+            if (classic) {
+                const replaceBubble = tf("zipMappedClassic", {
+                    nu: classic.users.length,
+                    no: classic.orders.length,
+                    np: classic.products.length,
                 });
-                setDataStatus(s);
-                appendSystemBubble(s);
-                setStatus(t("statusReadyChat"));
-                return;
+                return { ok: true, bundle: classic, replaceBubble };
             }
-            const sk = mapSakila(sqlText);
+            const sk = buildSakilaData(sqlText);
             if (sk) {
-                const msg = tf("zipMappedSakila", {
-                    nu: appData.users.length,
-                    no: appData.orders.length,
-                    np: appData.products.length,
+                const replaceBubble = tf("zipMappedSakila", {
+                    nu: sk.users.length,
+                    no: sk.orders.length,
+                    np: sk.products.length,
                 });
-                setDataStatus(msg);
-                appendSystemBubble(msg);
-                setStatus(t("statusReadyChat"));
-                return;
+                return { ok: true, bundle: sk, replaceBubble };
             }
         }
 
         setDataStatus(t("zipInvalid"), true);
+        return { ok: false };
     } catch (error) {
         setDataStatus(tf("zipError", { msg: error.message }), true);
+        return { ok: false };
     }
 }
 
 async function loadData() {
-    const file = dataFile.files?.[0];
+    const file = uploadFile.files?.[0];
     if (!file) {
-        setDataStatus(t("pickFileFirst"), true);
+        showStatus(t("pickFileFirst"), true);
         return;
     }
-    setDataStatus(t("statusLoadingData"));
-    const lower = file.name.toLowerCase();
-    try {
-        if (lower.endsWith(".zip")) {
-            await loadDataFromZipFile(file);
-            return;
-        }
-        if (lower.endsWith(".csv")) {
-            await loadSingleCsvFile(file);
-            return;
-        }
-        setDataStatus(t("invalidExtension"), true);
-    } catch (error) {
-        setDataStatus(tf("readError", { msg: error.message }), true);
-    }
+    await handleFileUploadWithFile(file, "replace");
+    if (uploadFile) uploadFile.value = "";
 }
 
-sendBtn.addEventListener("click", sendChat);
-clearChatBtn.addEventListener("click", clearChat);
-loadDataBtn.addEventListener("click", loadData);
-dataFile.addEventListener("change", () => {
-    void loadData();
-});
+// Utility functions
+function escapeHtml(value) {
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+}
 
-questionInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        sendChat();
+function renderAssistantHtml(text) {
+    const raw = String(text || "");
+    if (typeof marked !== "undefined") {
+        try {
+            marked.setOptions({ mangle: false, headerIds: false, breaks: true });
+            return marked.parse(raw);
+        } catch {
+            /* fall through */
+        }
     }
-});
+    return `<p>${escapeHtml(raw).replace(/\n/g, "<br>")}</p>`;
+}
 
-document.querySelectorAll(".example-chip").forEach((btn) => {
-    btn.addEventListener("click", () => {
-        questionInput.value = btn.textContent || "";
-        sendChat();
-    });
-});
-
-panelToggle.addEventListener("click", () => {
-    const open = dataPanel.classList.toggle("hidden");
-    panelToggle.setAttribute("aria-expanded", String(!open));
-    updatePanelToggleLabel();
-});
-
-initGateAndLocale();
+// Initialize the app
+initApp();
+updateSidebarHistoryUi();
+updateDbStatus();
