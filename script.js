@@ -175,10 +175,17 @@ function initApp() {
     if (schemaOrdersBtn) schemaOrdersBtn.addEventListener("click", () => handleSchemaTableClick("orders", "ThanhToan"));
     if (schemaProductsBtn) schemaProductsBtn.addEventListener("click", () => handleSchemaTableClick("products", "MonHoc"));
 
+    // DB Viewer button
+    const openDbViewerBtn = document.getElementById("openDbViewerBtn");
+    if (openDbViewerBtn) openDbViewerBtn.addEventListener("click", () => openDbModal("users"));
+
+    // Init DB modal
+    initDbModal();
+
     // Quick chips
     chips.forEach(chip => {
         chip.addEventListener("click", () => {
-            inputTextarea.value = chip.textContent || "";
+            inputTextarea.value = chip.querySelector("span")?.textContent?.trim() || "";
             sendChat();
         });
     });
@@ -195,15 +202,9 @@ function initApp() {
 }
 
 function toggleSidebarSection(section) {
-    // Remove active class from all buttons
     document.querySelectorAll(".sidebar-btn").forEach(btn => btn.classList.remove("active"));
-
-    // Add active class to clicked button
     const btn = document.getElementById(`${section}Btn`);
     if (btn) btn.classList.add("active");
-
-    // Here you could implement showing different sidebar content
-    // For now, just update the active state
 }
 
 function updateSidebarHistoryUi() {
@@ -213,10 +214,16 @@ function updateSidebarHistoryUi() {
         const btn = document.createElement("button");
         btn.className = "sidebar-btn";
         btn.type = "button";
+        btn.title = t("historyClickHint");
         btn.innerHTML = `
             <i class="ti ti-message" aria-hidden="true"></i>
             <span>${escapeHtml(title)}</span>
         `;
+        btn.addEventListener("click", () => {
+            inputTextarea.value = title;
+            inputTextarea.focus();
+            inputTextarea.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
         historyList.appendChild(btn);
     }
     historyEmpty.style.display = sidebarHistoryItems.length ? "none" : "block";
@@ -342,6 +349,15 @@ function mergeBundleIntoActiveSource(bundle, fileLabel) {
     const u = bundle.users || [];
     const o = bundle.orders || [];
     const p = bundle.products || [];
+    
+    // Validate merge size to prevent memory issues (1M records limit)
+    const MERGE_LIMIT = 1000000;
+    const totalNew = u.length + o.length + p.length;
+    if (totalNew > MERGE_LIMIT) {
+        showStatus("Lỗi: File quá lớn để merge (tối đa 1M records). Vui lòng chia nhỏ file hoặc thay thế dữ liệu.", true);
+        return;
+    }
+    
     if (!hasData() || !activeSourceId || !dataSources.length) {
         replaceWorkspaceWithBundle(bundle, fileLabel);
         return;
@@ -386,6 +402,15 @@ function updateSchemaSidebarVisibility() {
     }
     if (schemaTables) {
         schemaTables.style.display = hasData() ? "flex" : "none";
+    }
+    if (schemaUsersBtn) {
+        schemaUsersBtn.style.display = appData.users.length ? "flex" : "none";
+    }
+    if (schemaOrdersBtn) {
+        schemaOrdersBtn.style.display = appData.orders.length ? "flex" : "none";
+    }
+    if (schemaProductsBtn) {
+        schemaProductsBtn.style.display = appData.products.length ? "flex" : "none";
     }
 }
 
@@ -480,16 +505,17 @@ function inferCsvRole(filename) {
 }
 
 /**
- * Chọn 3 CSV trong ZIP: khớp tên trước; thiếu thì gán file chưa khớp (theo ABC);
- * ZIP chỉ có đúng 3 CSV mà không khớp tên → gán lần lượt theo tên file sort.
+ * Chọn 1-3 CSV trong ZIP: khớp tên trước; thiếu thì gán file chưa khớp (theo ABC);
+ * Hỗ trợ 1 file, 2 files hoặc 3 files CSV.
  */
-function resolveZipCsvTriple(csvEntries) {
+function resolveZipCsvPartial(csvEntries) {
     const list = csvEntries.slice();
-    if (list.length < 3) return null;
+    if (list.length < 1) return null;
 
     const roles = { users: null, orders: null, products: null };
     const taken = new Set();
 
+    // Bước 1: Khớp tên từ khóa
     for (const role of ["users", "orders", "products"]) {
         const hit = list.find((e) => !taken.has(e.name) && inferTableRoleFromFilename(e.name) === role);
         if (hit) {
@@ -498,6 +524,7 @@ function resolveZipCsvTriple(csvEntries) {
         }
     }
 
+    // Bước 2: Gán file chưa khớp (theo ABC)
     const rest = list
         .filter((e) => !taken.has(e.name))
         .sort((a, b) => zipEntryBasename(a.name).localeCompare(zipEntryBasename(b.name), undefined, { sensitivity: "base" }));
@@ -508,15 +535,25 @@ function resolveZipCsvTriple(csvEntries) {
         }
     }
 
-    if (roles.users && roles.orders && roles.products) {
+    // Bước 3: Nếu tìm thấy ít nhất 1 file, trả về (hỗ trợ 1-3 files)
+    if (roles.users || roles.orders || roles.products) {
         return roles;
     }
 
-    if (list.length === 3) {
+    // Fallback: nếu có >= 3 files mà không khớp, gán theo thứ tự sort
+    if (list.length >= 3) {
         const sorted = list
             .slice()
             .sort((a, b) => zipEntryBasename(a.name).localeCompare(zipEntryBasename(b.name), undefined, { sensitivity: "base" }));
         return { users: sorted[0], orders: sorted[1], products: sorted[2] };
+    }
+
+    // Nếu chỉ có 1-2 files, trả về những files có
+    if (list.length === 1) {
+        return { users: list[0], orders: null, products: null };
+    }
+    if (list.length === 2) {
+        return { users: list[0], orders: list[1], products: null };
     }
 
     return null;
@@ -558,7 +595,8 @@ function sqliteSelectAllObjects(db, tableName) {
 }
 
 /**
- * Ánh xạ bảng SQLite → users / orders / products (SinhVien, ThanhToan/HocPhi, MonHoc, …).
+ * Ánh xạ 1-3 bảng SQLite → users / orders / products (SinhVien, ThanhToan/HocPhi, MonHoc, …).
+ * Hỗ trợ database có 1, 2, 3 hoặc nhiều bảng.
  */
 function selectThreeSqliteTableNames(tableNames) {
     const lower = (t) => String(t).toLowerCase();
@@ -596,13 +634,24 @@ function selectThreeSqliteTableNames(tableNames) {
         used.add(productsT);
     }
 
-    if (usersT && ordersT && productsT) {
+    // Nếu tìm thấy ít nhất 1 bảng, trả về (hỗ trợ 1-3 bảng)
+    if (usersT || ordersT || productsT) {
         return { usersTable: usersT, ordersTable: ordersT, productsTable: productsT };
     }
 
+    // Fallback: nếu có >= 3 bảng mà không khớp, gán theo thứ tự sort
     if (tableNames.length === 3) {
         const s = [...tableNames].sort((a, b) => lower(a).localeCompare(lower(b)));
         return { usersTable: s[0], ordersTable: s[1], productsTable: s[2] };
+    }
+
+    // Nếu chỉ có 1-2 bảng, trả về những bảng có
+    if (tableNames.length === 1) {
+        return { usersTable: tableNames[0], ordersTable: null, productsTable: null };
+    }
+    if (tableNames.length === 2) {
+        const s = [...tableNames].sort((a, b) => lower(a).localeCompare(lower(b)));
+        return { usersTable: s[0], ordersTable: s[1], productsTable: null };
     }
 
     return null;
@@ -613,18 +662,21 @@ async function readSqliteBundleFromBuffer(arrayBuffer) {
     const db = new SQL.Database(new Uint8Array(arrayBuffer));
     try {
         const names = sqliteTableNames(db);
-        if (names.length < 3) {
+        if (names.length < 1) {
             db.close();
             return null;
         }
+        
+        // Thử match với 3 bảng (hoặc ít hơn)
         const map = selectThreeSqliteTableNames(names);
         if (!map) {
             db.close();
             return null;
         }
-        const users = sqliteSelectAllObjects(db, map.usersTable);
-        const orders = sqliteSelectAllObjects(db, map.ordersTable);
-        const products = sqliteSelectAllObjects(db, map.productsTable);
+        
+        const users = map.usersTable ? sqliteSelectAllObjects(db, map.usersTable) : [];
+        const orders = map.ordersTable ? sqliteSelectAllObjects(db, map.ordersTable) : [];
+        const products = map.productsTable ? sqliteSelectAllObjects(db, map.productsTable) : [];
         db.close();
         return { bundle: { users, orders, products }, map };
     } catch (e) {
@@ -662,24 +714,23 @@ function updateDbStatus() {
         dbStatus.style.alignItems = "center";
     }
     const tags = dbStatus.querySelector(".db-tags");
-    if (tags) {
-        tags.innerHTML = `
-            <span class="db-tag">Users: ${appData.users.length}</span>
-            <span class="db-tag">Orders: ${appData.orders.length}</span>
-            <span class="db-tag">Products: ${appData.products.length}</span>
-        `;
-    }
     const messageEl = document.getElementById("dbStatusMessage");
     const loadedCount = [appData.users.length, appData.orders.length, appData.products.length].filter((v) => v > 0).length;
     if (messageEl) {
         messageEl.textContent = tf("dataLoadedCount", { count: loadedCount });
     }
     if (tags) {
-        tags.innerHTML = `
-            <span class="db-tag">${t("dbTagUsers")}: ${appData.users.length}</span>
-            <span class="db-tag">${t("dbTagOrders")}: ${appData.orders.length}</span>
-            <span class="db-tag">${t("dbTagProducts")}: ${appData.products.length}</span>
-        `;
+        const parts = [];
+        if (appData.users.length) {
+            parts.push(`<span class="db-tag">${t("dbTagUsers")}: ${appData.users.length}</span>`);
+        }
+        if (appData.orders.length) {
+            parts.push(`<span class="db-tag">${t("dbTagOrders")}: ${appData.orders.length}</span>`);
+        }
+        if (appData.products.length) {
+            parts.push(`<span class="db-tag">${t("dbTagProducts")}: ${appData.products.length}</span>`);
+        }
+        tags.innerHTML = parts.join("");
     }
 }
 
@@ -731,13 +782,44 @@ function appendSystemBubble(text) {
     scrollChat();
 }
 
+function computeAggregates(rows) {
+    if (!rows.length) return {};
+    const result = {};
+    for (const col of Object.keys(rows[0])) {
+        const vals = rows.map(r => parseFloat(r[col])).filter(v => !isNaN(v) && isFinite(v));
+        if (vals.length > 0 && vals.length >= rows.length * 0.4) {
+            const sum = vals.reduce((a, b) => a + b, 0);
+            result[col] = {
+                sum: Math.round(sum * 100) / 100,
+                avg: Math.round((sum / vals.length) * 100) / 100,
+                min: Math.min(...vals),
+                max: Math.max(...vals),
+                count: vals.length,
+            };
+        }
+    }
+    return result;
+}
+
 function buildDatasetForApi() {
+    const isTruncated = appData.users.length > PREVIEW_ROWS ||
+        appData.orders.length > PREVIEW_ROWS ||
+        appData.products.length > PREVIEW_ROWS;
     return {
         meta: {
             totalUsers: appData.users.length,
             totalOrders: appData.orders.length,
             totalProducts: appData.products.length,
             previewRows: PREVIEW_ROWS,
+            isTruncated,
+            note: isTruncated
+                ? `Du lieu bi cat ngon tai ${PREVIEW_ROWS} dong/bang. Dung aggregates.* de tinh toan chinh xac tren toan bo du lieu.`
+                : null,
+        },
+        aggregates: {
+            users: computeAggregates(appData.users),
+            orders: computeAggregates(appData.orders),
+            products: computeAggregates(appData.products),
         },
         users: appData.users.slice(0, PREVIEW_ROWS),
         orders: appData.orders.slice(0, PREVIEW_ROWS),
@@ -769,6 +851,7 @@ async function sendChat() {
     addSidebarHistoryItem(text);
 
     sendBtn.disabled = true;
+    sendBtn.innerHTML = '<i class="ti ti-loader-2 spin"></i>';
     showStatus(t("statusCallingApi"));
 
     try {
@@ -799,6 +882,7 @@ async function sendChat() {
         showStatus(msg, true);
     } finally {
         sendBtn.disabled = false;
+        sendBtn.innerHTML = '<i class="ti ti-arrow-up"></i>';
         scrollChat();
     }
 }
@@ -824,14 +908,12 @@ function getFileIcon(fileName) {
 function attachFileToChat(file) {
     if (!file) return;
     
-    // Check file size (max 10MB)
     const MAX_SIZE = 10 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
         showStatus(tf("fileTooLarge", { size: "10MB" }), true);
         return;
     }
     
-    // Add to attached files list
     attachedFiles.push({ file, name: file.name, size: file.size });
     renderAttachedFiles();
     showStatus(tf("fileAttached", { name: file.name }));
@@ -869,7 +951,7 @@ function renderAttachedFiles() {
     });
     
     // Add remove handlers
-    document.querySelectorAll(".attached-file-remove").forEach(btn => {
+    attachedFilesContainer.querySelectorAll(".attached-file-remove").forEach(btn => {
         btn.addEventListener("click", (e) => {
             const idx = parseInt(e.currentTarget.dataset.idx);
             attachedFiles.splice(idx, 1);
@@ -879,19 +961,55 @@ function renderAttachedFiles() {
 }
 
 function showStatus(message, isError = false) {
-    // For now, we'll show status in the input hint label
     const hintLabel = document.querySelector(".input-hint span");
     if (hintLabel) {
-        hintLabel.textContent = message || "Enter để gửi · Shift+Enter xuống dòng";
-        hintLabel.style.color = isError ? "#dc2626" : "var(--text3)";
+        if (message) {
+            hintLabel.textContent = message;
+            hintLabel.style.color = isError ? "#dc2626" : "var(--text3)";
+        } else {
+            const key = hintLabel.getAttribute("data-i18n");
+            hintLabel.textContent = key ? t(key) : "";
+            hintLabel.style.color = "var(--text3)";
+        }
     }
 }
 
 async function handleFileUploadWithFile(file, mode) {
     if (!file) return;
     const lower = file.name.toLowerCase();
-    if (!lower.endsWith(".zip") && !lower.endsWith(".csv")) {
+    if (!lower.endsWith(".zip") && !lower.endsWith(".csv") && !lower.endsWith(".db") && !lower.endsWith(".sqlite")) {
         showStatus(t("invalidExtension"), true);
+        return;
+    }
+
+    // Handle .db / .sqlite (SQLite) files loaded directly
+    if (lower.endsWith(".db") || lower.endsWith(".sqlite")) {
+        showStatus(t("statusLoadingData"));
+        try {
+            const buf = await file.arrayBuffer();
+            const sqlite = await readSqliteBundleFromBuffer(buf);
+            if (!sqlite?.bundle) {
+                showStatus(t("zipInvalid"), true);
+                return;
+            }
+            const b = sqlite.bundle;
+            const bubble = tf("zipLoadedSqlite", {
+                tu: sqlite.map.usersTable, to: sqlite.map.ordersTable, tp: sqlite.map.productsTable,
+                nu: b.users.length, no: b.orders.length, np: b.products.length,
+            });
+            if (mode === "replace") {
+                replaceWorkspaceWithBundle(b, file.name);
+            } else if (mode === "addSource") {
+                addBundleAsNewSource(b, file.name);
+            } else {
+                mergeBundleIntoActiveSource(b, file.name);
+            }
+            appendSystemBubble(bubble);
+            updateDbStatus();
+            showStatus(t("statusReadyChat"));
+        } catch (err) {
+            showStatus(tf("readError", { msg: err.message }), true);
+        }
         return;
     }
 
@@ -975,7 +1093,9 @@ async function handleFileUploadWithFile(file, mode) {
             showStatus(t("statusReadyChat"));
         }
     } catch (error) {
-        showStatus(tf("readError", { msg: error.message }), true);
+        const errorMsg = error.code ? `${error.code}: ${error.message}` : error.message;
+        showStatus(tf("readError", { msg: errorMsg }), true);
+        console.error("Upload error:", error);
     }
 }
 
@@ -986,18 +1106,48 @@ async function handleFileUploadFromInput(input, mode) {
     if (input) input.value = "";
 }
 
+// RFC 4180 compliant CSV row parser
+function parseCsvRow(line) {
+    const cells = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+                current += '"'; // escaped double-quote
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (ch === "," && !inQuotes) {
+            cells.push(current);
+            current = "";
+        } else {
+            current += ch;
+        }
+    }
+    cells.push(current);
+    return cells;
+}
+
 function parseCsvText(text) {
-    const lines = text.split(/\r?\n/).filter((line) => line.trim());
-    if (lines.length < 2) return [];
-    const headers = lines[0].split(",").map((h) => h.trim());
-    return lines.slice(1).map((line) => {
-        const cells = line.split(",");
-        const row = {};
-        headers.forEach((header, idx) => {
-            row[header] = (cells[idx] ?? "").trim();
-        });
-        return row;
-    });
+    const lines = text.split(/\r?\n/);
+    const result = [];
+    let headers = null;
+    for (const line of lines) {
+        if (!line.trim()) continue;
+        const row = parseCsvRow(line);
+        if (!headers) {
+            // Normalize headers: trim + lowercase for consistent column matching
+            headers = row.map(h => h.trim().toLowerCase());
+        } else {
+            const obj = {};
+            headers.forEach((h, idx) => { obj[h] = (row[idx] ?? "").trim(); });
+            result.push(obj);
+        }
+    }
+    return result;
 }
 
 async function csvFileToBundle(file) {
@@ -1179,12 +1329,12 @@ async function extractZipBundle(file) {
         const entries = Object.values(zip.files).filter((entry) => !entry.dir);
         const csvEntries = entries.filter((entry) => entry.name.toLowerCase().endsWith(".csv"));
 
-        if (csvEntries.length >= 3) {
-            const triple = resolveZipCsvTriple(csvEntries);
-            if (triple) {
-                const users = parseCsvText(await triple.users.async("string"));
-                const orders = parseCsvText(await triple.orders.async("string"));
-                const products = parseCsvText(await triple.products.async("string"));
+        if (csvEntries.length >= 1) {
+            const partial = resolveZipCsvPartial(csvEntries);
+            if (partial) {
+                const users = partial.users ? parseCsvText(await partial.users.async("string")) : [];
+                const orders = partial.orders ? parseCsvText(await partial.orders.async("string")) : [];
+                const products = partial.products ? parseCsvText(await partial.products.async("string")) : [];
                 const bundle = { users, orders, products };
                 const replaceBubble = tf("zipLoadedCsv", {
                     nu: bundle.users.length,
@@ -1195,7 +1345,10 @@ async function extractZipBundle(file) {
             }
         }
 
-        const dbEntries = entries.filter((entry) => entry.name.toLowerCase().endsWith(".db"));
+        const dbEntries = entries.filter((entry) => {
+            const lowerName = entry.name.toLowerCase();
+            return lowerName.endsWith(".db") || lowerName.endsWith(".sqlite");
+        });
         for (const dbEntry of dbEntries) {
             try {
                 const buf = await dbEntry.async("arraybuffer");
@@ -1213,7 +1366,7 @@ async function extractZipBundle(file) {
                     return { ok: true, bundle: b, replaceBubble };
                 }
             } catch (_) {
-                /* thử file .db khác hoặc định dạng khác */
+                /* thử file .db hoặc .sqlite khác hoặc định dạng khác */
             }
         }
 
@@ -1243,7 +1396,9 @@ async function extractZipBundle(file) {
         setDataStatus(t("zipInvalid"), true);
         return { ok: false };
     } catch (error) {
-        setDataStatus(tf("zipError", { msg: error.message }), true);
+        const errorMsg = error.code ? `${error.code}: ${error.message}` : error.message;
+        setDataStatus(tf("zipError", { msg: errorMsg }), true);
+        console.error("ZIP extraction error:", error);
         return { ok: false };
     }
 }
@@ -1272,7 +1427,7 @@ function renderAssistantHtml(text) {
     const raw = String(text || "");
     if (typeof marked !== "undefined") {
         try {
-            marked.setOptions({ mangle: false, headerIds: false, breaks: true });
+            marked.use({ breaks: true });
             return marked.parse(raw);
         } catch {
             /* fall through */
@@ -1285,3 +1440,253 @@ function renderAssistantHtml(text) {
 initApp();
 updateSidebarHistoryUi();
 updateDbStatus();
+
+// ─────────────────────────────────────────────
+//  DB VIEWER MODAL
+// ─────────────────────────────────────────────
+const DB_PAGE_SIZE = 50;
+let dbModal_role = "users";
+let dbModal_page = 1;
+let dbModal_totalPages = 1;
+let dbModal_totalRows = 0;
+let dbModal_serverRows = [];
+let dbModal_remoteEnabled = false;
+let dbModal_filter = "";
+let dbModal_filtered = [];
+
+function getAvailableDbRoles() {
+    return ["users", "orders", "products"].filter((role) => Array.isArray(appData[role]) && appData[role].length > 0);
+}
+
+function refreshDbModalTabs() {
+    const available = getAvailableDbRoles();
+    const tabWrapper = document.querySelector(".db-modal-tabs");
+    if (tabWrapper) {
+        tabWrapper.style.display = available.length > 1 ? "flex" : "none";
+    }
+    document.querySelectorAll(".db-tab-btn").forEach((btn) => {
+        const role = btn.dataset.role;
+        if (available.includes(role)) {
+            btn.style.display = "inline-flex";
+        } else {
+            btn.style.display = "none";
+        }
+    });
+}
+
+async function openDbModal(initialRole = "users") {
+    const modal = document.getElementById("dbModal");
+    if (!modal) return;
+    if (!hasData()) {
+        showStatus(t("statusNoData"), true);
+        return;
+    }
+
+    const available = getAvailableDbRoles();
+    if (!available.length) {
+        showStatus(t("statusNoData"), true);
+        return;
+    }
+
+    refreshDbModalTabs();
+    if (!available.includes(initialRole)) {
+        initialRole = available[0];
+    }
+
+    dbModal_role = initialRole;
+    dbModal_filter = "";
+    dbModal_page = 1;
+
+    const searchInput = document.getElementById("dbSearchInput");
+    if (searchInput) {
+        searchInput.value = "";
+        searchInput.placeholder = t("dbSearchPlaceholder");
+    }
+
+    document.querySelectorAll(".db-tab-btn").forEach(btn =>
+        btn.classList.toggle("active", btn.dataset.role === dbModal_role)
+    );
+
+    renderDbModal();
+
+    modal.style.display = "flex";
+    document.body.style.overflow = "hidden";
+    searchInput?.focus();
+}
+
+async function loadDbPage(role, page = 1) {
+    try {
+        const resp = await fetch(`/api/students?table=${encodeURIComponent(role)}&page=${page}&pageSize=${DB_PAGE_SIZE}`);
+        const data = await resp.json();
+        if (!resp.ok) {
+            throw new Error(data.error || "Không lấy được dữ liệu");
+        }
+        dbModal_serverRows = Array.isArray(data.rows) ? data.rows : [];
+        dbModal_totalRows = Number(data.total) || 0;
+        dbModal_totalPages = Number(data.totalPages) || 1;
+        dbModal_page = Number(data.page) || page;
+        dbModal_role = role;
+        renderDbModal();
+    } catch (error) {
+        showStatus(`Lỗi tải trang dữ liệu: ${error.message}`, true);
+        console.error("loadDbPage error:", error);
+    }
+}
+
+function closeDbModal() {
+    const modal = document.getElementById("dbModal");
+    if (modal) modal.style.display = "none";
+    document.body.style.overflow = "";
+}
+
+function renderDbModal() {
+    const rows = dbModal_remoteEnabled ? dbModal_serverRows : (Array.isArray(appData[dbModal_role]) ? appData[dbModal_role] : []);
+
+    // Apply search filter across all columns
+    const q = dbModal_filter.toLowerCase().trim();
+    dbModal_filtered = q
+        ? rows.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(q)))
+        : rows.slice();
+
+    const totalRows = dbModal_filtered.length;
+    const totalPages = dbModal_remoteEnabled ? Math.max(1, dbModal_totalPages) : 1;
+    if (dbModal_page >= totalPages) dbModal_page = Math.max(0, totalPages - 1);
+
+    const pageRows = dbModal_remoteEnabled ? dbModal_filtered : dbModal_filtered;
+
+    // Row info badge
+    const rowInfo = document.getElementById("dbRowInfo");
+    if (rowInfo) {
+        if (q) {
+            rowInfo.textContent = tf("dbRowsFiltered", { filtered: totalRows, total: rows.length });
+        } else if (dbModal_remoteEnabled) {
+            rowInfo.textContent = tf("dbRows", { count: dbModal_totalRows });
+        } else {
+            rowInfo.textContent = tf("dbRows", { count: rows.length });
+        }
+    }
+
+    // Page info
+    const pageInfo = document.getElementById("dbPageInfo");
+    if (pageInfo) {
+        pageInfo.textContent = tf("dbPage", { page: dbModal_page + 1, total: totalPages });
+        pageInfo.style.display = dbModal_remoteEnabled ? "inline" : "none";
+    }
+
+    // Pagination buttons
+    const prevBtn = document.getElementById("dbPrevBtn");
+    const nextBtn = document.getElementById("dbNextBtn");
+    if (prevBtn) {
+        prevBtn.disabled = dbModal_remoteEnabled ? dbModal_page <= 1 : true;
+        prevBtn.style.display = dbModal_remoteEnabled ? "inline-flex" : "none";
+    }
+    if (nextBtn) {
+        nextBtn.disabled = dbModal_remoteEnabled ? dbModal_page >= totalPages : true;
+        nextBtn.style.display = dbModal_remoteEnabled ? "inline-flex" : "none";
+    }
+
+    // Render table
+    const wrap = document.getElementById("dbTableWrap");
+    if (!wrap) return;
+
+    if (!pageRows.length) {
+        const msg = q ? t("dbNoResults") : t("dbNoData");
+        const icon = q ? "ti-zoom-cancel" : "ti-database-off";
+        wrap.innerHTML = `
+            <div class="db-empty-state">
+                <i class="ti ${icon}"></i>
+                <p>${escapeHtml(msg)}</p>
+            </div>`;
+        return;
+    }
+
+    const cols = Object.keys(pageRows[0]);
+    const headerHtml = cols.map(c => `<th>${escapeHtml(c)}</th>`).join("");
+
+    const bodyHtml = pageRows.map(r => {
+        const tds = cols.map(c => {
+            const v = String(r[c] ?? "");
+            const isNum = v !== "" && !isNaN(Number(v)) && v.trim() !== "";
+            const display = v.length > 40 ? v.slice(0, 38) + "…" : v;
+            return `<td class="${isNum ? "td-num" : ""}" title="${escapeHtml(v)}">${escapeHtml(display)}</td>`;
+        }).join("");
+        return `<tr>${tds}</tr>`;
+    }).join("");
+
+    const roleLabels = { users: t("dbTableUsers"), orders: t("dbTableOrders"), products: t("dbTableProducts") };
+    const availableTables = getAvailableDbRoles();
+    const currentTableLabel = availableTables.length > 1 ? roleLabels[dbModal_role] || dbModal_role : "";
+    const titleHtml = currentTableLabel ? `<div class="db-table-title">${escapeHtml(currentTableLabel)}</div>` : "";
+
+    wrap.innerHTML = `
+        ${titleHtml}
+        <table class="db-full-table">
+            <thead><tr>${headerHtml}</tr></thead>
+            <tbody>${bodyHtml}</tbody>
+        </table>`;
+}
+
+function initDbModal() {
+    const modal = document.getElementById("dbModal");
+    if (!modal) return;
+
+    // Close on overlay backdrop click
+    modal.addEventListener("click", e => { if (e.target === modal) closeDbModal(); });
+
+    // Close button
+    document.getElementById("dbModalClose")?.addEventListener("click", closeDbModal);
+
+    // ESC key to close
+    document.addEventListener("keydown", e => {
+        if (e.key === "Escape" && modal.style.display !== "none") closeDbModal();
+    });
+
+    // Tab switching
+    document.querySelectorAll(".db-tab-btn").forEach(btn => {
+        btn.addEventListener("click", async () => {
+            dbModal_role = btn.dataset.role;
+            dbModal_page = 1;
+            dbModal_filter = "";
+            const searchInput = document.getElementById("dbSearchInput");
+            if (searchInput) searchInput.value = "";
+            document.querySelectorAll(".db-tab-btn").forEach(b =>
+                b.classList.toggle("active", b === btn)
+            );
+            if (dbModal_remoteEnabled) {
+                await loadDbPage(dbModal_role, dbModal_page);
+            } else {
+                renderDbModal();
+            }
+        });
+    });
+
+    // Live search
+    document.getElementById("dbSearchInput")?.addEventListener("input", e => {
+        dbModal_filter = e.target.value;
+        dbModal_page = 0;
+        renderDbModal();
+    });
+
+    // Pagination
+    document.getElementById("dbPrevBtn")?.addEventListener("click", async () => {
+        if (dbModal_page > 1) {
+            dbModal_page--;
+            if (dbModal_remoteEnabled) {
+                await loadDbPage(dbModal_role, dbModal_page);
+            } else {
+                renderDbModal();
+            }
+        }
+    });
+    document.getElementById("dbNextBtn")?.addEventListener("click", async () => {
+        if (dbModal_page < dbModal_totalPages) {
+            dbModal_page++;
+            if (dbModal_remoteEnabled) {
+                await loadDbPage(dbModal_role, dbModal_page);
+            } else {
+                renderDbModal();
+            }
+        }
+    });
+}
+

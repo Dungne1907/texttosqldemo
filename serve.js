@@ -3,10 +3,17 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const { URL } = require("url");
+const Database = require("better-sqlite3");
 
 const PORT = Number(process.env.PORT) || 5500;
 const ROOT = __dirname;
 const MAX_BODY = 4 * 1024 * 1024;
+const STUDENT_DB_FILE = path.join(ROOT, "CNTT_ChuDoi_CoSoDuLieu_2025.sqlite");
+const STUDENT_TABLES = {
+    users: "SinhVien",
+    orders: "ThanhToan",
+    products: "MonHoc",
+};
 
 const MIME_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -42,6 +49,25 @@ function loadDotEnv() {
 }
 
 loadDotEnv();
+
+function queryDbPage(tableKey, page, pageSize) {
+    const tableName = STUDENT_TABLES[tableKey];
+    if (!tableName) throw new Error("Invalid table");
+    if (!fs.existsSync(STUDENT_DB_FILE)) throw new Error("Student database not found");
+
+    const db = new Database(STUDENT_DB_FILE, { readonly: true });
+    try {
+        const countRow = db.prepare(`SELECT COUNT(*) AS count FROM "${tableName}"`).get();
+        const total = Number(countRow?.count || 0);
+        const offset = (page - 1) * pageSize;
+        const rows = db
+            .prepare(`SELECT * FROM "${tableName}" LIMIT ? OFFSET ?`)
+            .all(pageSize, offset);
+        return { rows, total };
+    } finally {
+        db.close();
+    }
+}
 
 function safeResolve(urlPath) {
     const cleanPath = decodeURIComponent(urlPath.split("?")[0]);
@@ -100,13 +126,14 @@ function httpsJson(urlString, { method = "GET", headers = {}, body = null } = {}
     });
 }
 
-const SYSTEM_PREFIX = `Ban la nha phan tich du lieu. Du lieu gom toi da 3 nhom logic trong JSON: users, orders, products. Mot so nhom co the rong neu nguoi dung chi nap mot phan bang.
-- Tra loi bang tieng Viet, neu co so lieu hay neu ro con so (tong, trung binh, dem, v.v.).
-- Neu bang nao trong JSON la mang rong, hay noi ro la khong co du lieu cho nhom do; neu chi co mau rut gon, hay noi ro ket luan chi mang tinh minh hoa tren mau.
-- Co the dung markdown: tieu de ##, danh sach, bang gom cot, hoac khoi code neu can.
-- Khong bia so: chi dua tren du lieu duoc cung cap.
+const SYSTEM_PREFIX = `Bạn là nhà phân tích dữ liệu. Dữ liệu gồm tối đa 3 nhóm logic trong JSON: users, orders, products. Một số nhóm có thể rỗng nếu người dùng chỉ nạp một phần bảng.
+- Trả lời bằng tiếng Việt, nếu có số liệu hãy nêu rõ con số (tổng, trung bình, đếm, v.v.).
+- Trường "meta" chứa tổng số dòng thực (totalUsers, totalOrders, totalProducts). Trường "aggregates" chứa thống kê tính sẵn trên TOÀN BỘ dữ liệu (sum, avg, min, max, count) — hãy ưu tiên dùng aggregates.* để tính toán chính xác thay vì dùng dữ liệu preview có thể bị cắt ngắn.
+- Nếu bảng nào trong JSON là mảng rỗng, hãy nói rõ là không có dữ liệu cho nhóm đó.
+- Có thể dùng markdown: tiêu đề ##, danh sách, bảng gồm cột, hoặc khối code nếu cần.
+- Không bịa số: chỉ dựa trên dữ liệu được cung cấp.
 
-=== DU LIEU (JSON) ===
+=== DỮ LIỆU (JSON) ===
 `;
 
 function callDeepSeek({ apiKey, systemText, messages }) {
@@ -167,7 +194,8 @@ function callGemini({ apiKey, systemText, messages }) {
 
 async function handleChat(req, res) {
     res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    const allowedOrigin = process.env.CORS_ORIGIN || "http://localhost:5500";
+    res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
     try {
         const raw = await readRequestBody(req, MAX_BODY);
         const payload = JSON.parse(raw);
@@ -221,12 +249,41 @@ const server = http.createServer((req, res) => {
     }
 
     if (req.method === "OPTIONS" && urlPath === "/api/chat") {
+        const allowedOrigin = process.env.CORS_ORIGIN || "http://localhost:5500";
         res.writeHead(204, {
-            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Origin": allowedOrigin,
             "Access-Control-Allow-Methods": "POST, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type",
         });
         res.end();
+        return;
+    }
+
+    if (req.method === "GET" && urlPath === "/api/students") {
+        const requestUrl = new URL(req.url || "", `http://${req.headers.host || "localhost"}`);
+        const params = requestUrl.searchParams;
+        const table = String(params.get("table") || "users");
+        const page = Math.max(1, Number(params.get("page") || 1));
+        const pageSize = Math.max(1, Math.min(200, Number(params.get("pageSize") || 50)));
+
+        try {
+            const data = queryDbPage(table, page, pageSize);
+            const totalPages = Math.max(1, Math.ceil(data.total / pageSize));
+            res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(
+                JSON.stringify({
+                    table,
+                    page,
+                    pageSize,
+                    total: data.total,
+                    totalPages,
+                    rows: data.rows,
+                })
+            );
+        } catch (error) {
+            res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify({ error: error.message || "Server error" }));
+        }
         return;
     }
 
