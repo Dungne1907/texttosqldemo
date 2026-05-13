@@ -188,6 +188,14 @@ html, body {
   gap: 8px;
 }
 
+.schema-role-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .schema-badge {
   margin-left: auto;
   font-size: 10px;
@@ -320,41 +328,6 @@ html, body {
   gap: 20px;
   scroll-behavior: smooth;
 }
-
-/* QUICK CHIPS */
-.chips-label {
-  font-size: 11px;
-  color: var(--text3);
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.chip {
-  padding: 8px 14px;
-  border: 1px solid var(--border2);
-  border-radius: 20px;
-  background: var(--surface);
-  color: var(--text2);
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.15s;
-  font-family: var(--sans);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.chip:hover {
-  border-color: var(--accent);
-  color: var(--accent2);
-  background: var(--accent-glow);
-}
-.chip i { font-size: 14px; }
 
 /* MESSAGES */
 .msg { display: flex; gap: 12px; }

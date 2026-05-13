@@ -54,15 +54,18 @@
     <div id="schemaTables" class="schema-tables" style="display:none;">
       <button id="schemaUsersBtn" class="sidebar-btn" type="button">
         <i class="ti ti-table" aria-hidden="true"></i>
-        SinhVien <span id="schemaUsersCount" style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text3)">0 rows</span>
+        <span id="schemaUsersLabel" class="schema-role-name">SinhVien</span>
+        <span id="schemaUsersCount" style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text3)">0 rows</span>
       </button>
       <button id="schemaOrdersBtn" class="sidebar-btn" type="button">
         <i class="ti ti-table" aria-hidden="true"></i>
-        ThanhToan <span id="schemaOrdersCount" style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text3)">0 rows</span>
+        <span id="schemaOrdersLabel" class="schema-role-name">ThanhToan</span>
+        <span id="schemaOrdersCount" style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text3)">0 rows</span>
       </button>
       <button id="schemaProductsBtn" class="sidebar-btn" type="button">
         <i class="ti ti-table" aria-hidden="true"></i>
-        MonHoc <span id="schemaProductsCount" style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text3)">0 rows</span>
+        <span id="schemaProductsLabel" class="schema-role-name">MonHoc</span>
+        <span id="schemaProductsCount" style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text3)">0 rows</span>
       </button>
       <button id="openDbViewerBtn" class="sidebar-btn" type="button" style="margin-top:4px;color:var(--accent);border:1px dashed var(--border2);">
         <i class="ti ti-eye" aria-hidden="true"></i>
@@ -115,25 +118,6 @@
     <!-- CHAT -->
     <div class="chat-area" id="chatArea">
 
-      <!-- WELCOME + CHIPS -->
-      <div>
-        <div class="chips-label" data-i18n="chipsLabel">Câu hỏi gợi ý</div>
-        <div class="chips">
-          <button class="chip">
-            <i class="ti ti-cash" aria-hidden="true"></i>
-            <span data-i18n="chip1">Tổng học phí đã thu là bao nhiêu?</span>
-          </button>
-          <button class="chip">
-            <i class="ti ti-chart-bar" aria-hidden="true"></i>
-            <span data-i18n="chip2">Doanh thu theo khoa / ngành</span>
-          </button>
-          <button class="chip">
-            <i class="ti ti-users" aria-hidden="true"></i>
-            <span data-i18n="chip3">Số sinh viên chưa đóng học phí</span>
-          </button>
-        </div>
-      </div>
-
       <!-- EXAMPLE CONVERSATION -->
     </div>
 
@@ -178,9 +162,9 @@
       </button>
     </div>
     <div class="db-modal-tabs">
-      <button class="db-tab-btn active" data-role="users" type="button">SinhVien</button>
-      <button class="db-tab-btn" data-role="orders" type="button">ThanhToan</button>
-      <button class="db-tab-btn" data-role="products" type="button">MonHoc</button>
+      <button class="db-tab-btn active" data-role="users" type="button"><span class="db-tab-label">SinhVien</span></button>
+      <button class="db-tab-btn" data-role="orders" type="button"><span class="db-tab-label">ThanhToan</span></button>
+      <button class="db-tab-btn" data-role="products" type="button"><span class="db-tab-label">MonHoc</span></button>
     </div>
     <div class="db-modal-toolbar">
       <div class="db-search-wrap">

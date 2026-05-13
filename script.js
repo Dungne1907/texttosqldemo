@@ -33,9 +33,6 @@ const schemaUsersCount = document.getElementById("schemaUsersCount");
 const schemaOrdersCount = document.getElementById("schemaOrdersCount");
 const schemaProductsCount = document.getElementById("schemaProductsCount");
 
-// Quick chips
-const chips = document.querySelectorAll(".chip");
-
 // API and data
 const API_URL = "http://localhost:5500/api/chat";
 const appData = { users: [], orders: [], products: [] };
@@ -72,6 +69,7 @@ function applyLocale() {
     if (historyEmpty) historyEmpty.textContent = t("historyEmpty");
 
     refreshLangButtons();
+    applySchemaLabelsToUi();
 }
 
 function refreshLangButtons() {
@@ -171,9 +169,9 @@ function initApp() {
     if (dataBtn) dataBtn.addEventListener("click", () => toggleSidebarSection("data"));
     if (historyBtn) historyBtn.addEventListener("click", () => toggleSidebarSection("history"));
     if (schemaBtn) schemaBtn.addEventListener("click", () => toggleSidebarSection("schema"));
-    if (schemaUsersBtn) schemaUsersBtn.addEventListener("click", () => handleSchemaTableClick("users", "SinhVien"));
-    if (schemaOrdersBtn) schemaOrdersBtn.addEventListener("click", () => handleSchemaTableClick("orders", "ThanhToan"));
-    if (schemaProductsBtn) schemaProductsBtn.addEventListener("click", () => handleSchemaTableClick("products", "MonHoc"));
+    if (schemaUsersBtn) schemaUsersBtn.addEventListener("click", () => handleSchemaTableClick("users", getSchemaLabelForRole("users")));
+    if (schemaOrdersBtn) schemaOrdersBtn.addEventListener("click", () => handleSchemaTableClick("orders", getSchemaLabelForRole("orders")));
+    if (schemaProductsBtn) schemaProductsBtn.addEventListener("click", () => handleSchemaTableClick("products", getSchemaLabelForRole("products")));
 
     // DB Viewer button
     const openDbViewerBtn = document.getElementById("openDbViewerBtn");
@@ -181,14 +179,6 @@ function initApp() {
 
     // Init DB modal
     initDbModal();
-
-    // Quick chips
-    chips.forEach(chip => {
-        chip.addEventListener("click", () => {
-            inputTextarea.value = chip.querySelector("span")?.textContent?.trim() || "";
-            sendChat();
-        });
-    });
 
     // Initialize locale
     applyLocale();
@@ -248,6 +238,58 @@ function hasData() {
 let dataSources = [];
 let activeSourceId = null;
 
+/** Tên bảng / file gốc hiển thị trong Schema (theo role users/orders/products). */
+function coerceTableLabels(raw) {
+    const out = { users: null, orders: null, products: null };
+    if (!raw || typeof raw !== "object") return out;
+    for (const k of ["users", "orders", "products"]) {
+        const v = raw[k];
+        if (typeof v === "string" && v.trim()) out[k] = v.trim();
+    }
+    return out;
+}
+
+function labelsFromSqliteMap(map) {
+    if (!map) return coerceTableLabels(null);
+    return coerceTableLabels({
+        users: map.usersTable || null,
+        orders: map.ordersTable || null,
+        products: map.productsTable || null,
+    });
+}
+
+function csvStemFromFilename(filename) {
+    const base = zipEntryBasename(filename);
+    return base.replace(/\.csv$/i, "") || base;
+}
+
+function getActiveSourceEntry() {
+    return dataSources.find((x) => x.id === activeSourceId) || null;
+}
+
+function getSchemaLabelForRole(role) {
+    const entry = getActiveSourceEntry();
+    const custom = entry?.tableLabels?.[role];
+    if (typeof custom === "string" && custom.trim()) return custom.trim();
+    if (role === "users") return t("dbTableUsers");
+    if (role === "orders") return t("dbTableOrders");
+    return t("dbTableProducts");
+}
+
+function applySchemaLabelsToUi() {
+    const mapIds = { users: "schemaUsersLabel", orders: "schemaOrdersLabel", products: "schemaProductsLabel" };
+    for (const role of ["users", "orders", "products"]) {
+        const el = document.getElementById(mapIds[role]);
+        if (el) el.textContent = getSchemaLabelForRole(role);
+    }
+    document.querySelectorAll(".db-tab-btn").forEach((btn) => {
+        const role = btn.dataset.role;
+        if (!role) return;
+        const lab = btn.querySelector(".db-tab-label");
+        if (lab) lab.textContent = getSchemaLabelForRole(role);
+    });
+}
+
 function persistActiveSource() {
     if (!activeSourceId) return;
     const s = dataSources.find((x) => x.id === activeSourceId);
@@ -281,14 +323,15 @@ function activateDataSource(id) {
     }
 }
 
-function replaceWorkspaceWithBundle(bundle, label) {
+function replaceWorkspaceWithBundle(bundle, label, tableLabels) {
     const id = crypto.randomUUID();
     const data = {
         users: bundle.users || [],
         orders: bundle.orders || [],
         products: bundle.products || [],
     };
-    dataSources = [{ id, label: label || "dataset", data }];
+    const tl = coerceTableLabels(tableLabels);
+    dataSources = [{ id, label: label || "dataset", data, tableLabels: tl }];
     activeSourceId = id;
     appData.users = data.users;
     appData.orders = data.orders;
@@ -296,17 +339,18 @@ function replaceWorkspaceWithBundle(bundle, label) {
 }
 
 /** Thêm dữ liệu mới như một nguồn riêng biệt (không gộp). */
-function addBundleAsNewSource(bundle, label) {
+function addBundleAsNewSource(bundle, label, tableLabels) {
     const id = crypto.randomUUID();
     const data = {
         users: bundle.users || [],
         orders: bundle.orders || [],
         products: bundle.products || [],
     };
+    const tl = coerceTableLabels(tableLabels);
     // Lưu source hiện tại trước khi chuyển
     persistActiveSource();
     // Thêm source mới vào danh sách
-    dataSources.push({ id, label: label || "dataset", data });
+    dataSources.push({ id, label: label || "dataset", data, tableLabels: tl });
     // Tự động kích hoạt source mới để người dùng thấy dữ liệu
     activeSourceId = id;
     appData.users = data.users;
@@ -344,8 +388,8 @@ function mergeTableRowsUnionColumns(existing, incoming) {
     return [...a.map((r) => normalizeRowToKeyList(r, keyList)), ...b.map((r) => normalizeRowToKeyList(r, keyList))];
 }
 
-/** Gộp file mới vào nguồn đang chọn (cùng SinhVien / ThanhToan / MonHoc). Nếu chưa có dữ liệu thì tương đương nạp mới. */
-function mergeBundleIntoActiveSource(bundle, fileLabel) {
+/** Gộp file mới vào nguồn đang chọn. Nếu chưa có dữ liệu thì tương đương nạp mới. */
+function mergeBundleIntoActiveSource(bundle, fileLabel, tableLabels) {
     const u = bundle.users || [];
     const o = bundle.orders || [];
     const p = bundle.products || [];
@@ -359,21 +403,31 @@ function mergeBundleIntoActiveSource(bundle, fileLabel) {
     }
     
     if (!hasData() || !activeSourceId || !dataSources.length) {
-        replaceWorkspaceWithBundle(bundle, fileLabel);
+        replaceWorkspaceWithBundle(bundle, fileLabel, tableLabels);
         return;
     }
     appData.users = mergeTableRowsUnionColumns(appData.users, u);
     appData.orders = mergeTableRowsUnionColumns(appData.orders, o);
     appData.products = mergeTableRowsUnionColumns(appData.products, p);
-    persistActiveSource();
     const entry = dataSources.find((x) => x.id === activeSourceId);
-    if (entry && fileLabel) {
-        const tail = fileLabel.length > 14 ? `${fileLabel.slice(0, 11)}…` : fileLabel;
-        if (!entry.label.includes(tail.slice(0, 8))) {
-            const next = `${entry.label} + ${tail}`;
-            entry.label = next.length > 48 ? `${next.slice(0, 45)}…` : next;
+    if (entry) {
+        if (!entry.tableLabels) entry.tableLabels = { users: null, orders: null, products: null };
+        const inc = coerceTableLabels(tableLabels);
+        for (const role of ["users", "orders", "products"]) {
+            const incomingRows = bundle[role];
+            if (Array.isArray(incomingRows) && incomingRows.length && inc[role]) {
+                entry.tableLabels[role] = inc[role];
+            }
+        }
+        if (fileLabel) {
+            const tail = fileLabel.length > 14 ? `${fileLabel.slice(0, 11)}…` : fileLabel;
+            if (!entry.label.includes(tail.slice(0, 8))) {
+                const next = `${entry.label} + ${tail}`;
+                entry.label = next.length > 48 ? `${next.slice(0, 45)}…` : next;
+            }
         }
     }
+    persistActiveSource();
 }
 
 function renderDataSourcesList() {
@@ -706,6 +760,7 @@ function updateDbStatus() {
     renderDataSourcesList();
     if (!hasData()) {
         if (dbStatus) dbStatus.style.display = "none";
+        applySchemaLabelsToUi();
         return;
     }
 
@@ -732,6 +787,7 @@ function updateDbStatus() {
         }
         tags.innerHTML = parts.join("");
     }
+    applySchemaLabelsToUi();
 }
 
 function scrollChat() {
@@ -998,11 +1054,11 @@ async function handleFileUploadWithFile(file, mode) {
                 nu: b.users.length, no: b.orders.length, np: b.products.length,
             });
             if (mode === "replace") {
-                replaceWorkspaceWithBundle(b, file.name);
+                replaceWorkspaceWithBundle(b, file.name, labelsFromSqliteMap(sqlite.map));
             } else if (mode === "addSource") {
-                addBundleAsNewSource(b, file.name);
+                addBundleAsNewSource(b, file.name, labelsFromSqliteMap(sqlite.map));
             } else {
-                mergeBundleIntoActiveSource(b, file.name);
+                mergeBundleIntoActiveSource(b, file.name, labelsFromSqliteMap(sqlite.map));
             }
             appendSystemBubble(bubble);
             updateDbStatus();
@@ -1019,10 +1075,10 @@ async function handleFileUploadWithFile(file, mode) {
             const r = await extractZipBundle(file);
             if (!r.ok) return;
             if (mode === "replace") {
-                replaceWorkspaceWithBundle(r.bundle, file.name);
+                replaceWorkspaceWithBundle(r.bundle, file.name, r.tableLabels);
                 if (r.replaceBubble) appendSystemBubble(r.replaceBubble);
             } else if (mode === "addSource") {
-                addBundleAsNewSource(r.bundle, file.name);
+                addBundleAsNewSource(r.bundle, file.name, r.tableLabels);
                 appendSystemBubble(
                     tf("sourceAddedAsNew", {
                         name: file.name,
@@ -1033,7 +1089,7 @@ async function handleFileUploadWithFile(file, mode) {
                 );
             } else {
                 const emptyBefore = !hasData();
-                mergeBundleIntoActiveSource(r.bundle, file.name);
+                mergeBundleIntoActiveSource(r.bundle, file.name, r.tableLabels);
                 if (emptyBefore && r.replaceBubble) {
                     appendSystemBubble(r.replaceBubble);
                 } else if (!emptyBefore) {
@@ -1053,11 +1109,16 @@ async function handleFileUploadWithFile(file, mode) {
                 if (r.reason === "hint") showStatus(t("csvFilenameHint"), true);
                 return;
             }
+            const csvLabels = (() => {
+                const out = { users: null, orders: null, products: null };
+                if (r.role) out[r.role] = csvStemFromFilename(file.name);
+                return out;
+            })();
             if (mode === "replace") {
-                replaceWorkspaceWithBundle(r.bundle, file.name);
+                replaceWorkspaceWithBundle(r.bundle, file.name, csvLabels);
                 if (r.replaceBubble) appendSystemBubble(r.replaceBubble);
             } else if (mode === "addSource") {
-                addBundleAsNewSource(r.bundle, file.name);
+                addBundleAsNewSource(r.bundle, file.name, csvLabels);
                 appendSystemBubble(
                     tf("sourceAddedAsNew", {
                         name: file.name,
@@ -1069,7 +1130,7 @@ async function handleFileUploadWithFile(file, mode) {
                 showStatus(r.statusText);
             } else {
                 const emptyBefore = !hasData();
-                mergeBundleIntoActiveSource(r.bundle, file.name);
+                mergeBundleIntoActiveSource(r.bundle, file.name, csvLabels);
                 if (emptyBefore) {
                     if (r.replaceBubble) appendSystemBubble(r.replaceBubble);
                     showStatus(r.statusText);
@@ -1172,7 +1233,7 @@ async function csvFileToBundle(file) {
                   np: bundle.products.length,
               })
             : tf("csvPartial", { role, rows: rows.length, miss: miss.join(", ") });
-    return { ok: true, bundle, statusText, replaceBubble: miss.length === 0 ? statusText : null };
+    return { ok: true, bundle, statusText, replaceBubble: miss.length === 0 ? statusText : null, role };
 }
 
 function stripQuotes(value) {
@@ -1341,7 +1402,12 @@ async function extractZipBundle(file) {
                     no: bundle.orders.length,
                     np: bundle.products.length,
                 });
-                return { ok: true, bundle, replaceBubble };
+                const tableLabels = coerceTableLabels({
+                    users: partial.users ? zipEntryBasename(partial.users.name).replace(/\.csv$/i, "") : null,
+                    orders: partial.orders ? zipEntryBasename(partial.orders.name).replace(/\.csv$/i, "") : null,
+                    products: partial.products ? zipEntryBasename(partial.products.name).replace(/\.csv$/i, "") : null,
+                });
+                return { ok: true, bundle, replaceBubble, tableLabels };
             }
         }
 
@@ -1363,7 +1429,7 @@ async function extractZipBundle(file) {
                         no: b.orders.length,
                         np: b.products.length,
                     });
-                    return { ok: true, bundle: b, replaceBubble };
+                    return { ok: true, bundle: b, replaceBubble, tableLabels: labelsFromSqliteMap(sqlite.map) };
                 }
             } catch (_) {
                 /* thử file .db hoặc .sqlite khác hoặc định dạng khác */
@@ -1380,7 +1446,12 @@ async function extractZipBundle(file) {
                     no: classic.orders.length,
                     np: classic.products.length,
                 });
-                return { ok: true, bundle: classic, replaceBubble };
+                return {
+                    ok: true,
+                    bundle: classic,
+                    replaceBubble,
+                    tableLabels: coerceTableLabels({ users: "customers", orders: "payments", products: "products" }),
+                };
             }
             const sk = buildSakilaData(sqlText);
             if (sk) {
@@ -1389,7 +1460,12 @@ async function extractZipBundle(file) {
                     no: sk.orders.length,
                     np: sk.products.length,
                 });
-                return { ok: true, bundle: sk, replaceBubble };
+                return {
+                    ok: true,
+                    bundle: sk,
+                    replaceBubble,
+                    tableLabels: coerceTableLabels({ users: "customer", orders: "payment", products: "film" }),
+                };
             }
         }
 
@@ -1613,9 +1689,8 @@ function renderDbModal() {
         return `<tr>${tds}</tr>`;
     }).join("");
 
-    const roleLabels = { users: t("dbTableUsers"), orders: t("dbTableOrders"), products: t("dbTableProducts") };
     const availableTables = getAvailableDbRoles();
-    const currentTableLabel = availableTables.length > 1 ? roleLabels[dbModal_role] || dbModal_role : "";
+    const currentTableLabel = availableTables.length > 1 ? getSchemaLabelForRole(dbModal_role) : "";
     const titleHtml = currentTableLabel ? `<div class="db-table-title">${escapeHtml(currentTableLabel)}</div>` : "";
 
     wrap.innerHTML = `
