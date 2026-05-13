@@ -26,22 +26,88 @@ const MIME_TYPES = {
     ".svg": "image/svg+xml",
 };
 
+/** Gán biến từ một dòng .env nếu process chưa có hoặc đang rỗng. */
+function applyDotEnvLine(key, val) {
+    if (!key) return;
+    if (process.env[key] !== undefined && String(process.env[key]).trim() !== "") return;
+    process.env[key] = val;
+}
+
+/** Đọc một file .env (UTF-8, bỏ BOM). */
+function applyDotEnvFromFile(envPath) {
+    if (!fs.existsSync(envPath)) return;
+    let text = fs.readFileSync(envPath, "utf8");
+    if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+    for (const line of text.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+        const eq = trimmed.indexOf("=");
+        if (eq === -1) continue;
+        const key = trimmed.slice(0, eq).trim();
+        let val = trimmed.slice(eq + 1).trim();
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+            val = val.slice(1, -1);
+        }
+        applyDotEnvLine(key, val);
+    }
+}
+
+/** File chứa biến môi trường (bỏ .env.example). */
+function isLoadableEnvFilename(name) {
+    if (!name.endsWith(".env")) return false;
+    if (name === ".env.example" || name.endsWith(".env.example")) return false;
+    return true;
+}
+
+/** Thu thập mọi file *.env trong cây thư mục (tối đa maxDepth cấp con). */
+function collectEnvFilesRecursive(dir, out, depth, maxDepth) {
+    if (depth > maxDepth || !fs.existsSync(dir)) return;
+    let entries;
+    try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+        return;
+    }
+    for (const ent of entries) {
+        const full = path.join(dir, ent.name);
+        if (ent.isDirectory()) {
+            if (ent.name === "node_modules" || ent.name === ".git") continue;
+            collectEnvFilesRecursive(full, out, depth + 1, maxDepth);
+        } else if (ent.isFile() && isLoadableEnvFilename(ent.name)) {
+            out.push(full);
+        }
+    }
+}
+
+/** Các file .env được thử theo thứ tự; file sau chỉ bổ sung khi biến vẫn trống. */
+function collectDotEnvPaths() {
+    const list = [
+        path.join(ROOT, ".env"),
+        path.join(ROOT, ".env.local"),
+        path.join(ROOT, "texttosqldemo", ".env"),
+    ];
+    const vscodeRoot = path.join(ROOT, "texttosqldemo", ".vscode");
+    const nested = [];
+    collectEnvFilesRecursive(vscodeRoot, nested, 0, 6);
+    nested.sort((a, b) => {
+        const ba = path.basename(a);
+        const bb = path.basename(b);
+        if (ba === ".env" && bb !== ".env") return -1;
+        if (bb === ".env" && ba !== ".env") return 1;
+        return a.localeCompare(b, "en");
+    });
+    list.push(...nested);
+    return list;
+}
+
 function loadDotEnv() {
     try {
-        const envPath = path.join(ROOT, ".env");
-        if (!fs.existsSync(envPath)) return;
-        const text = fs.readFileSync(envPath, "utf8");
-        for (const line of text.split(/\r?\n/)) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith("#")) continue;
-            const eq = trimmed.indexOf("=");
-            if (eq === -1) continue;
-            const key = trimmed.slice(0, eq).trim();
-            let val = trimmed.slice(eq + 1).trim();
-            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-                val = val.slice(1, -1);
-            }
-            if (key && process.env[key] === undefined) process.env[key] = val;
+        const seen = new Set();
+        for (const envPath of collectDotEnvPaths()) {
+            const norm = path.normalize(envPath);
+            if (seen.has(norm)) continue;
+            seen.add(norm);
+            applyDotEnvFromFile(norm);
         }
     } catch {
         /* ignore */
