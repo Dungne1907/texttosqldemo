@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DataChat — README</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Lora:ital,wght@0,400;0,500;1,400;1,500&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0e0f11;
+    --bg2: #16181c;
+    --bg3: #1e2026;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #e8e9ed;
+    --muted: #8a8f9e;
+    --accent: #5b8eff;
+    --accent2: #7dd4c0;
+    --accent3: #f0a05a;
+    --accent4: #c084fc;
+    --red: #f87171;
+    --green: #4ade80;
+    --yellow: #facc15;
+  }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 0 2rem 6rem;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    padding: 5rem 0 3.5rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4rem;
+    position: relative;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -2rem; right: -2rem; bottom: 0;
+    background: radial-gradient(ellipse 60% 40% at 50% 0%, rgba(91,142,255,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .hero-eyebrow::before {
+    content: '';
+    display: inline-block;
+    width: 20px; height: 1px;
+    background: var(--accent);
+  }
+  h1 {
+    font-family: 'Lora', serif;
+    font-size: clamp(2.8rem, 6vw, 4.2rem);
+    font-weight: 400;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: #fff;
+    margin-bottom: 1rem;
+  }
+  h1 em {
+    font-style: italic;
+    color: var(--accent);
+  }
+  .hero-sub {
+    font-size: 17px;
+    color: var(--muted);
+    max-width: 520px;
+    line-height: 1.7;
+    margin-bottom: 2.5rem;
+  }
+  .badge-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+  .badge.blue { color: var(--accent); border-color: rgba(91,142,255,0.3); background: rgba(91,142,255,0.07); }
+  .badge.teal { color: var(--accent2); border-color: rgba(125,212,192,0.3); background: rgba(125,212,192,0.07); }
+  .badge.orange { color: var(--accent3); border-color: rgba(240,160,90,0.3); background: rgba(240,160,90,0.07); }
+  .badge.purple { color: var(--accent4); border-color: rgba(192,132,252,0.3); background: rgba(192,132,252,0.07); }
+
+  /* ── SECTIONS ── */
+  .section { margin-bottom: 4rem; }
+
+  h2 {
+    font-family: 'Lora', serif;
+    font-size: 1.9rem;
+    font-weight: 400;
+    color: #fff;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .h2-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    background: rgba(91,142,255,0.08);
+    border: 1px solid rgba(91,142,255,0.2);
+    border-radius: 4px;
+    padding: 3px 7px;
+    letter-spacing: 0.05em;
+  }
+
+  h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 1rem;
+  }
+
+  p { color: var(--muted); margin-bottom: 0.9rem; }
+  p:last-child { margin-bottom: 0; }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 12px;
+    margin-bottom: 1.5rem;
+  }
+  .card-icon {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    margin-bottom: 0.8rem;
+  }
+  .card-icon.blue { background: rgba(91,142,255,0.12); }
+  .card-icon.teal { background: rgba(125,212,192,0.12); }
+  .card-icon.orange { background: rgba(240,160,90,0.12); }
+  .card-icon.purple { background: rgba(192,132,252,0.12); }
+  .card .label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .card .desc {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* ── CODE BLOCKS ── */
+  pre {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+  }
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: #c9d1e0;
+    line-height: 1.8;
+  }
+  pre code { background: none; padding: 0; border-radius: 0; }
+  :not(pre) > code {
+    background: rgba(255,255,255,0.06);
+    padding: 2px 6px;
+    border-radius: 5px;
+    color: var(--accent2);
+    font-size: 12.5px;
+  }
+  .kw { color: var(--accent4); }
+  .str { color: var(--green); }
+  .comment { color: var(--muted); font-style: italic; }
+  .env-key { color: var(--accent3); }
+  .env-val { color: var(--accent2); }
+
+  /* ── STEPS ── */
+  .steps { display: flex; flex-direction: column; gap: 0; }
+  .step {
+    display: grid;
+    grid-template-columns: 48px 1fr;
+    gap: 0 1.25rem;
+    padding-bottom: 2.5rem;
+    position: relative;
+  }
+  .step:last-child { padding-bottom: 0; }
+  .step-line {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .step-num {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--border2);
+    background: var(--bg2);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  .step-connector {
+    flex: 1;
+    width: 1px;
+    background: var(--border);
+    margin-top: 6px;
+  }
+  .step:last-child .step-connector { display: none; }
+  .step-body { padding-top: 6px; }
+  .step-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: #fff;
+    margin-bottom: 0.5rem;
+  }
+  .step-desc { font-size: 14px; color: var(--muted); margin-bottom: 0.8rem; }
+
+  /* ── TABLES ── */
+  .table-wrap { overflow-x: auto; margin: 1rem 0; border-radius: 10px; border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  thead tr { background: var(--bg3); }
+  th {
+    text-align: left;
+    padding: 10px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 400;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 10px 16px;
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  td code { font-size: 12px; }
+
+  /* ── ALERTS ── */
+  .alert {
+    display: flex;
+    gap: 12px;
+    padding: 1rem 1.25rem;
+    border-radius: 10px;
+    margin: 1rem 0;
+    font-size: 14px;
+    line-height: 1.6;
+    border: 1px solid;
+  }
+  .alert.warn { background: rgba(250,204,21,0.05); border-color: rgba(250,204,21,0.2); color: #e8d68a; }
+  .alert.info { background: rgba(91,142,255,0.06); border-color: rgba(91,142,255,0.2); color: #a8c0ff; }
+  .alert-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── FILE TREE ── */
+  .file-tree {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 2;
+  }
+  .ft-dir { color: var(--accent); }
+  .ft-file { color: var(--muted); }
+  .ft-comment { color: rgba(255,255,255,0.2); }
+  .ft-special { color: var(--accent2); }
+
+  /* ── LIMIT LIST ── */
+  .limit-list { list-style: none; display: flex; flex-direction: column; gap: 10px; margin: 1rem 0; }
+  .limit-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .limit-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--border2);
+    flex-shrink: 0;
+    margin-top: 7px;
+  }
+
+  /* ── DIVIDER ── */
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 3.5rem 0;
+  }
+
+  /* ── API ENDPOINT ── */
+  .endpoint {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+  }
+  .method {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
+  .method.get { background: rgba(74,222,128,0.12); color: var(--green); }
+  .method.post { background: rgba(91,142,255,0.12); color: var(--accent); }
+  .endpoint-path { color: var(--text); flex: 1; }
+  .endpoint-desc { color: var(--muted); font-size: 12px; }
+
+  /* ── TROUBLE TABLE ── */
+  td .symptom { color: #fff; font-weight: 500; font-size: 13px; margin-bottom: 3px; }
+  td .cause { font-size: 12.5px; color: var(--muted); }
+
+  /* ── FOOTER ── */
+  .footer {
+    margin-top: 5rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: gap;
+    gap: 12px;
+  }
+  .footer-brand {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .footer-brand span { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="hero-eyebrow">README · v1.0</div>
+    <h1>Data<em>Chat</em></h1>
+    <p class="hero-sub">Hỏi đáp dữ liệu bằng ngôn ngữ tự nhiên — nạp CSV, ZIP hay SQLite, đặt câu hỏi tiếng Việt và nhận kết quả phân tích chính xác từ AI.</p>
+    <div class="badge-row">
+      <span class="badge blue">Node.js 18+</span>
+      <span class="badge teal">Text-to-SQL</span>
+      <span class="badge orange">DeepSeek · Gemini</span>
+      <span class="badge purple">Chạy cục bộ</span>
+    </div>
+  </header>
+
+  <!-- YÊU CẦU HỆ THỐNG -->
+  <section class="section">
+    <h2><span class="h2-num">00</span> Yêu cầu hệ thống</h2>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-icon blue">⬡</div>
+        <div class="label">Node.js</div>
+        <div class="desc">Phiên bản 18 trở lên. Tải tại <code>nodejs.org</code></div>
+      </div>
+      <div class="card">
+        <div class="card-icon teal">◎</div>
+        <div class="label">Trình duyệt</div>
+        <div class="desc">Chrome, Edge hoặc Firefox phiên bản mới nhất</div>
+      </div>
+      <div class="card">
+        <div class="card-icon orange">⌇</div>
+        <div class="label">API Key</div>
+        <div class="desc">Ít nhất một trong hai: <strong style="color:#e8e9ed">DeepSeek</strong> hoặc <strong style="color:#e8e9ed">Gemini</strong></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CÀI ĐẶT -->
+  <section class="section">
+    <h2><span class="h2-num">01</span> Cài đặt</h2>
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-num">1</div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step-body">
+          <div class="step-title">Clone hoặc giải nén, rồi cài dependency</div>
+          <pre><code><span class="kw">cd</span> demo
+<span class="kw">npm</span> install</code></pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-num">2</div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step-body">
+          <div class="step-title">Tạo file <code>.env</code> cùng thư mục với <code>serve.js</code></div>
+          <pre><code><span class="comment"># Chọn ít nhất một</span>
+<span class="env-key">DEEPSEEK_API_KEY</span>=<span class="env-val">sk-your-deepseek-key</span>
+<span class="env-key">GEMINI_API_KEY</span>=<span class="env-val">your-gemini-key</span>
+
+<span class="comment"># Tuỳ chọn</span>
+<span class="env-key">PORT</span>=<span class="env-val">5500</span>
+<span class="env-key">CORS_ORIGIN</span>=<span class="env-val">http://localhost:5500</span>
+<span class="env-key">DEEPSEEK_MODEL</span>=<span class="env-val">deepseek-chat</span>
+<span class="env-key">GEMINI_MODEL</span>=<span class="env-val">gemini-2.0-flash</span></code></pre>
+          <div class="alert warn">
+            <span class="alert-icon">⚠</span>
+            <span>Không commit file <code>.env</code> lên Git. File đã được liệt kê trong <code>.gitignore</code>.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-num">3</div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step-body">
+          <div class="step-title">Khởi động máy chủ</div>
+          <pre><code><span class="kw">node</span> serve.js</code></pre>
+          <p style="font-size:13.5px">Mở trình duyệt tại <code>http://localhost:5500</code></p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-num">4</div>
+        </div>
+        <div class="step-body">
+          <div class="step-title">Chạy kiểm thử (tuỳ chọn)</div>
+          <pre><code><span class="kw">npm</span> test</code></pre>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- SỬ DỤNG -->
+  <section class="section">
+    <h2><span class="h2-num">02</span> Hướng dẫn sử dụng</h2>
+
+    <!-- Nạp dữ liệu -->
+    <h3>Nạp dữ liệu</h3>
+    <p>Kéo thả file vào vùng Upload hoặc bấm để chọn. Ba định dạng được hỗ trợ:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Định dạng</th><th>Mô tả</th></tr></thead>
+        <tbody>
+          <tr><td><code>.csv</code></td><td>Một bảng — tên file xác định vai trò trong ứng dụng</td></tr>
+          <tr><td><code>.zip</code></td><td>Gói nhiều CSV, file <code>.db</code> / <code>.sqlite</code>, hoặc SQL mẫu</td></tr>
+          <tr><td><code>.db</code> / <code>.sqlite</code></td><td>Cơ sở dữ liệu SQLite, tối đa 3 bảng được ánh xạ tự động</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-top: 2rem;">Gợi ý đặt tên file / bảng</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Nhóm logic</th><th>Vai trò</th><th>Tên gợi ý</th></tr></thead>
+        <tbody>
+          <tr><td>Sinh viên / khách hàng</td><td><code>users</code></td><td><code>sinhvien</code>, <code>users</code>, <code>student</code>, <code>customers</code></td></tr>
+          <tr><td>Thanh toán / điểm</td><td><code>orders</code></td><td><code>thanhtoan</code>, <code>hocphi</code>, <code>orders</code>, <code>bang_diem</code></td></tr>
+          <tr><td>Môn học / sản phẩm</td><td><code>products</code></td><td><code>monhoc</code>, <code>products</code>, <code>course</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Chế độ SQL -->
+    <h3 style="margin-top: 2rem;">Chế độ Few-shot SQL</h3>
+    <div class="alert info">
+      <span class="alert-icon">ℹ</span>
+      <span>Khuyến nghị bật. AI trả về JSON <code>{"sql", "explanation"}</code>, trình duyệt validate rồi chạy trực tiếp trên SQLite trong RAM bằng <code>sql.js</code> — hiển thị SQL, giải thích và bảng kết quả (tối đa 300 dòng).</span>
+    </div>
+
+    <!-- Ví dụ câu hỏi -->
+    <h3 style="margin-top: 2rem;">Ví dụ câu hỏi</h3>
+    <div class="card-grid" style="margin-top: 0.75rem;">
+      <div class="card"><div class="desc">"Có bao nhiêu sinh viên?"</div></div>
+      <div class="card"><div class="desc">"Trung bình điểm theo ngành?"</div></div>
+      <div class="card"><div class="desc">"Top 5 môn có nhiều sinh viên đăng ký nhất?"</div></div>
+    </div>
+
+    <!-- Phím tắt -->
+    <h3 style="margin-top: 2rem;">Phím tắt</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Phím</th><th>Hành động</th></tr></thead>
+        <tbody>
+          <tr><td><code>Enter</code></td><td>Gửi câu hỏi</td></tr>
+          <tr><td><code>Shift + Enter</code></td><td>Xuống dòng trong ô nhập</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Tính năng khác -->
+    <h3 style="margin-top: 2rem;">Tính năng khác</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tính năng</th><th>Mô tả</th></tr></thead>
+        <tbody>
+          <tr><td><code>VI / EN</code></td><td>Đổi ngôn ngữ giao diện</td></tr>
+          <tr><td>Lịch sử chat</td><td>Lưu trên <code>localStorage</code>, tối đa 30 cuộc; Xóa từng cuộc riêng lẻ</td></tr>
+          <tr><td>Schema</td><td>Bấm tên bảng → preview ~8 dòng trong khung chat</td></tr>
+          <tr><td>Xem toàn bộ</td><td>Modal duyệt toàn bộ dữ liệu đã nạp, có tìm kiếm</td></tr>
+          <tr><td>Thêm nguồn</td><td>Sidebar → Thêm nguồn dữ liệu → chọn file mới, lưu thành nguồn tách</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- CẤU TRÚC -->
+  <section class="section">
+    <h2><span class="h2-num">03</span> Cấu trúc thư mục</h2>
+    <div class="file-tree">
+<span class="ft-dir">demo/</span><br>
+├── <span class="ft-special">index.html</span>       <span class="ft-comment">Giao diện chính</span><br>
+├── <span class="ft-special">script.js</span>        <span class="ft-comment">Logic client — nạp file, chat, SQL pipeline</span><br>
+├── <span class="ft-special">style.css</span>        <span class="ft-comment">Stylesheet</span><br>
+├── <span class="ft-special">i18n.js</span>          <span class="ft-comment">Đa ngôn ngữ VI/EN</span><br>
+├── <span class="ft-special">serve.js</span>         <span class="ft-comment">Máy chủ Node.js + proxy /api/chat</span><br>
+├── <span class="ft-special">package.json</span><br>
+├── <span class="ft-dir">tests/</span>           <span class="ft-comment">Kiểm thử SQL pipeline</span><br>
+├── <span class="ft-file">*.sqlite</span>         <span class="ft-comment">DB mẫu tuỳ chọn</span><br>
+└── <span class="ft-special">README.html</span>     <span class="ft-comment">Hướng dẫn sử dụng (file này)</span>
+    </div>
+  </section>
+
+  <!-- API -->
+  <section class="section">
+    <h2><span class="h2-num">04</span> API máy chủ</h2>
+
+    <div class="endpoint">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/</span>
+      <span class="endpoint-desc">Phục vụ file tĩnh (HTML, JS, CSS)</span>
+    </div>
+    <div class="endpoint">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/api/chat</span>
+      <span class="endpoint-desc">Gửi câu hỏi + dataset tới DeepSeek/Gemini</span>
+    </div>
+    <div class="endpoint">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/api/students</span>
+      <span class="endpoint-desc">Phân trang DB mẫu cố định</span>
+    </div>
+
+    <h3 style="margin-top:1.75rem;">Request body — <code>/api/chat</code></h3>
+    <pre><code>{
+  <span class="str">"provider"</span>: <span class="str">"DeepSeek"</span>,
+  <span class="str">"mode"</span>: <span class="str">"sql"</span>,
+  <span class="str">"messages"</span>: [{ <span class="str">"role"</span>: <span class="str">"user"</span>, <span class="str">"content"</span>: <span class="str">"Đếm số sinh viên"</span> }],
+  <span class="str">"dataset"</span>: { <span class="str">"meta"</span>: {}, <span class="str">"schema"</span>: {}, <span class="str">"aggregates"</span>: {} }
+}</code></pre>
+  </section>
+
+  <hr class="divider">
+
+  <!-- XỬ LÝ SỰ CỐ -->
+  <section class="section">
+    <h2><span class="h2-num">05</span> Xử lý sự cố</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Triệu chứng</th><th>Nguyên nhân</th><th>Cách xử lý</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><div class="symptom">Thiếu API Key</div></td>
+            <td class="cause">Chưa có <code>.env</code> hoặc key sai</td>
+            <td class="cause">Tạo <code>.env</code>, restart <code>node serve.js</code></td>
+          </tr>
+          <tr>
+            <td><div class="symptom">Không gửi được chat</div></td>
+            <td class="cause">Chưa nạp dữ liệu</td>
+            <td class="cause">Nạp ít nhất một CSV/ZIP/SQLite</td>
+          </tr>
+          <tr>
+            <td><div class="symptom">Failed to fetch</div></td>
+            <td class="cause">Server chưa chạy hoặc sai cổng</td>
+            <td class="cause">Chạy <code>node serve.js</code>, mở đúng <code>localhost:5500</code></td>
+          </tr>
+          <tr>
+            <td><div class="symptom">ZIP không hợp lệ</div></td>
+            <td class="cause">Không nhận diện được CSV/SQLite/SQL bên trong</td>
+            <td class="cause">Đổi tên file theo bảng gợi ý ở mục 02</td>
+          </tr>
+          <tr>
+            <td><div class="symptom">SQL lỗi schema</div></td>
+            <td class="cause">AI dùng tên bảng/cột không tồn tại</td>
+            <td class="cause">Bật Few-shot SQL; kiểm tra tên cột trong sidebar Schema</td>
+          </tr>
+          <tr>
+            <td><div class="symptom">Merge quá lớn</div></td>
+            <td class="cause">Vượt ~1M dòng mới</td>
+            <td class="cause">Chia nhỏ file hoặc thay workspace thay vì gộp</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- GIỚI HẠN -->
+  <section class="section">
+    <h2><span class="h2-num">06</span> Giới hạn cần biết</h2>
+    <ul class="limit-list">
+      <li><span class="limit-dot"></span><span>Dữ liệu chỉ sống trong bộ nhớ trình duyệt — tải lại trang sẽ mất. Lịch sử chat vẫn được giữ qua <code>localStorage</code>.</span></li>
+      <li><span class="limit-dot"></span><span>Dataset rất lớn (&gt; vài chục MB) có thể làm trình duyệt chậm.</span></li>
+      <li><span class="limit-dot"></span><span>Dropdown <strong style="color:#e8e9ed">Claude</strong> và <strong style="color:#e8e9ed">GPT-4o</strong> trên UI chưa được triển khai ở backend — chỉ <strong style="color:#e8e9ed">DeepSeek</strong> và <strong style="color:#e8e9ed">Gemini</strong> hoạt động.</span></li>
+      <li><span class="limit-dot"></span><span>Chế độ SQL chỉ cho phép truy vấn <strong style="color:#e8e9ed">đọc</strong> (<code>SELECT</code> / <code>WITH</code>).</span></li>
+      <li><span class="limit-dot"></span><span>Nút kẹp giấy (đính kèm file) hiện chỉ hiển thị trên UI, chưa gửi nội dung file lên AI.</span></li>
+    </ul>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-brand"><span>DataChat</span> · README</div>
+    <div class="footer-brand">Chi tiết kỹ thuật → <code>REVIEW.md</code></div>
+  </footer>
+
+</div>
+</body>
+</html>
