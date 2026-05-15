@@ -73,6 +73,21 @@ html, body {
 }
 .topbar-spacer { flex: 1; }
 
+.topbar .sql-pipeline-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text2);
+  cursor: pointer;
+  user-select: none;
+  max-width: 260px;
+}
+.topbar .sql-pipeline-toggle input {
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
 .lang-toggle {
   display: flex;
   background: var(--bg3);
@@ -169,6 +184,66 @@ html, body {
 .sidebar-btn:hover { background: var(--surface); color: var(--text); }
 .sidebar-btn.active { background: var(--accent-glow); color: var(--accent2); }
 .sidebar-btn i { font-size: 16px; flex-shrink: 0; }
+
+.sidebar-new-chat {
+  border: 1px solid var(--border2);
+  background: var(--surface);
+  color: var(--accent2);
+  font-weight: 600;
+}
+
+#historyList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.history-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  align-items: center;
+  border-radius: var(--radius-sm);
+}
+
+.history-row.active {
+  background: var(--accent-glow);
+}
+
+.history-chat-btn {
+  min-width: 0;
+}
+
+.history-chat-btn span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-delete-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.15s;
+}
+
+.history-row:hover .history-delete-btn,
+.history-row.active .history-delete-btn {
+  opacity: 1;
+}
+
+.history-delete-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
 
 .sidebar-empty {
   font-size: 12px;
@@ -360,6 +435,49 @@ html, body {
   color: var(--text);
   border: 1px solid var(--border);
   border-bottom-left-radius: 4px;
+}
+
+.sql-pipeline-avatar {
+  font-size: 10px !important;
+  letter-spacing: -0.5px;
+}
+.sql-pipeline-bubble .sql-pipeline-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin: 0 0 6px;
+}
+.sql-pipeline-bubble .sql-pipeline-title:not(:first-child) {
+  margin-top: 14px;
+}
+.sql-pipeline-pre {
+  margin: 0 0 8px;
+  padding: 12px 14px;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  overflow-x: auto;
+  line-height: 1.55;
+}
+.sql-pipeline-explain {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text2);
+}
+.sql-pipeline-error {
+  margin: 0;
+  font-size: 13px;
+  color: #dc2626;
+}
+.sql-pipeline-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text3);
 }
 
 /* SQL BLOCK */

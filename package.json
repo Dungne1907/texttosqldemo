@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "test": "node tests/sql-pipeline-validation.test.js"
+  },
   "dependencies": {
     "better-sqlite3": "^12.10.0"
   }

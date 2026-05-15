@@ -7,7 +7,9 @@ const Database = require("better-sqlite3");
 
 const PORT = Number(process.env.PORT) || 5500;
 const ROOT = __dirname;
-const MAX_BODY = 4 * 1024 * 1024;
+const MAX_BODY_MB = Number(process.env.MAX_CHAT_BODY_MB);
+const MAX_BODY =
+    Number.isFinite(MAX_BODY_MB) && MAX_BODY_MB > 0 ? MAX_BODY_MB * 1024 * 1024 : 16 * 1024 * 1024;
 const STUDENT_DB_FILE = path.join(ROOT, "CNTT_ChuDoi_CoSoDuLieu_2025.sqlite");
 const STUDENT_TABLES = {
     users: "SinhVien",
@@ -194,7 +196,8 @@ function httpsJson(urlString, { method = "GET", headers = {}, body = null } = {}
 
 const SYSTEM_PREFIX = `Bạn là nhà phân tích dữ liệu. Dữ liệu gồm tối đa 3 nhóm logic trong JSON: users, orders, products. Một số nhóm có thể rỗng nếu người dùng chỉ nạp một phần bảng.
 - Trả lời bằng tiếng Việt, nếu có số liệu hãy nêu rõ con số (tổng, trung bình, đếm, v.v.).
-- Trường "meta" chứa tổng số dòng thực (totalUsers, totalOrders, totalProducts). Trường "aggregates" chứa thống kê tính sẵn trên TOÀN BỘ dữ liệu (sum, avg, min, max, count) — hãy ưu tiên dùng aggregates.* để tính toán chính xác thay vì dùng dữ liệu preview có thể bị cắt ngắn.
+- Trường "meta" chứa tổng số dòng (totalUsers, totalOrders, totalProducts). Các mảng users/orders/products là TOÀN BỘ dòng đã nạp. Nếu có trường "aggregates", đó là thống kê số (sum, avg, min, max, count) trên toàn bộ từng bảng — có thể dùng để đối chiếu hoặc tóm tắt nhanh.
+- Ba khối users/orders/products là ánh xạ logic từ tên file/bảng gốc: bảng điểm / GPA / kết quả học tập thường nằm trong orders, không nhất thiết trong users. Khi tìm tên sinh viên, mã SV hoặc điểm, hãy xét tất cả mảng không rỗng và mọi cột có thể chứa họ tên (ho_ten, ten, name, hoTen, …).
 - Nếu bảng nào trong JSON là mảng rỗng, hãy nói rõ là không có dữ liệu cho nhóm đó.
 - Có thể dùng markdown: tiêu đề ##, danh sách, bảng gồm cột, hoặc khối code nếu cần.
 - Không bịa số: chỉ dựa trên dữ liệu được cung cấp.
@@ -202,8 +205,42 @@ const SYSTEM_PREFIX = `Bạn là nhà phân tích dữ liệu. Dữ liệu gồm
 === DỮ LIỆU (JSON) ===
 `;
 
-function callDeepSeek({ apiKey, systemText, messages }) {
+const SYSTEM_PREFIX_SQL_DYNAMIC_SCHEMA = `Ban la tro ly sinh truy van SQLite tren du lieu nguoi dung da tai len.
+Ban CHI duoc tra ve MOT object JSON hop le, khong markdown, khong van ban ngoai JSON. Dinh dang:
+{"sql":"...mot cau SELECT duy nhat...","explanation":"Giai thich ngan bang tieng Viet"}
+
+QUY TAC BAT BUOC:
+- Chi sinh SQLite SQL.
+- Chi dung bang va cot xuat hien trong schema.tables cua JSON ben duoi.
+- KHONG dung bang mau hoac bang mac dinh nhu users, orders, products, students, bang_diem neu nhung ten do khong co trong schema.tables.
+- Neu chi co mot bang trong schema.tables, uu tien bang do.
+- Neu co nhieu bang, chon bang dua tren do khop giua cau hoi va ten bang/ten cot trong schema.tables.
+- Neu khong tim thay bang hoac cot phu hop, khong bia ten bang/cot. Tra ve {"sql":"SELECT 1 WHERE 0","explanation":"Khong tim thay bang hoac cot phu hop trong du lieu da tai len."}.
+- Mot cau lenh duy nhat: SELECT hoac WITH ... SELECT; khong INSERT/UPDATE/DELETE/DDL/PRAGMA/ATTACH.
+- Dung dung chinh ta ten bang va ten cot nhu schema.tables[].name va schema.tables[].columns. Nen quote identifier bang dau "..." khi ten co dau cach, dau tieng Viet, hoac ky tu dac biet.
+- Voi cot so dang TEXT, co the dung CAST(REPLACE("ten_cot", ',', '.') AS REAL) khi SUM/AVG/MIN/MAX/sap xep so.
+- Khong CAST cot phan loai thanh so neu gia tri mau la chu nhu "Xuat sac", "Tot", "Kha".
+- Neu can sap xep muc do cot phan loai co thu tu nhu diem ren luyen, dung CASE WHEN, vi du: Xuat sac > Tot > Kha > Trung binh > Yeu.
+- Chuoi "sql" trong JSON phai la chuoi JSON hop le: xuong dong trong SQL phai dung \\n.
+
+DU LIEU CO SAN:
+- schema.availableTables neu co la danh sach ro rang dang:
+  Available tables:
+  - table_name(columns: col_a, col_b)
+- schema.sample.rows chi la mau nho de nhan dien kieu du lieu. Khong suy dien gia tri tong/theo ca database tu mau.
+- Cau SQL se duoc he thong validate bang/cot theo schema that va chay tren toan bo SQLite cuc bo.
+
+VI DU HOP LE VOI SCHEMA DONG:
+- Neu schema chi co bang bang_diem(columns: Nganh hoc, TBCHK), cau hoi hoi trung binh TBCHK theo nganh thi dung FROM "bang_diem", khong dung FROM orders.
+- Neu schema chi co bang students(columns: name, score), cau hoi dem sinh vien thi dung FROM "students".
+
+=== DU LIEU GOI Y (JSON: meta, aggregates, schema) ===
+`;
+
+function callDeepSeek({ apiKey, systemText, messages, maxTokens = 4096 }) {
     const apiMessages = [{ role: "system", content: systemText }, ...messages];
+    const mt = Number(maxTokens);
+    const max_tok = Number.isFinite(mt) && mt > 256 ? Math.min(mt, 32768) : 4096;
     return httpsJson("https://api.deepseek.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -214,7 +251,7 @@ function callDeepSeek({ apiKey, systemText, messages }) {
             model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
             messages: apiMessages,
             temperature: 0.2,
-            max_tokens: 4096,
+            max_tokens: max_tok,
         },
     }).then(({ status, json, raw }) => {
         if (status < 200 || status >= 300) {
@@ -227,19 +264,21 @@ function callDeepSeek({ apiKey, systemText, messages }) {
     });
 }
 
-function callGemini({ apiKey, systemText, messages }) {
+function callGemini({ apiKey, systemText, messages, maxOutputTokens = 4096 }) {
     const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const contents = messages.map((m) => ({
         role: m.role === "assistant" ? "model" : "user",
         parts: [{ text: m.content }],
     }));
+    const mot = Number(maxOutputTokens);
+    const cap = Number.isFinite(mot) && mot > 256 ? Math.min(mot, 32768) : 4096;
     const body = {
         systemInstruction: { parts: [{ text: systemText }] },
         contents,
         generationConfig: {
             temperature: 0.2,
-            maxOutputTokens: 4096,
+            maxOutputTokens: cap,
         },
     };
     return httpsJson(url, {
@@ -276,7 +315,13 @@ async function handleChat(req, res) {
         }
 
         const datasetStr = JSON.stringify(dataset);
-        const systemText = SYSTEM_PREFIX + datasetStr;
+        const sqlMode = String(payload.mode || "").toLowerCase() === "sql";
+        const systemText = sqlMode ? `${SYSTEM_PREFIX_SQL_DYNAMIC_SCHEMA}\n${datasetStr}` : SYSTEM_PREFIX + datasetStr;
+
+        const sqlMaxDeep = Number(process.env.DEEPSEEK_MAX_TOKENS_SQL);
+        const sqlMaxGem = Number(process.env.GEMINI_MAX_TOKENS_SQL);
+        const deepTok = Number.isFinite(sqlMaxDeep) && sqlMaxDeep > 256 ? sqlMaxDeep : 8192;
+        const gemTok = Number.isFinite(sqlMaxGem) && sqlMaxGem > 256 ? sqlMaxGem : 8192;
 
         let reply;
         if (provider === "gemini") {
@@ -286,7 +331,12 @@ async function handleChat(req, res) {
                 res.end(JSON.stringify({ error: "Thieu GEMINI_API_KEY trong file .env (may chu)." }));
                 return;
             }
-            reply = await callGemini({ apiKey: key, systemText, messages });
+            reply = await callGemini({
+                apiKey: key,
+                systemText,
+                messages,
+                maxOutputTokens: sqlMode ? gemTok : 4096,
+            });
         } else {
             const key = process.env.DEEPSEEK_API_KEY;
             if (!key) {
@@ -294,7 +344,12 @@ async function handleChat(req, res) {
                 res.end(JSON.stringify({ error: "Thieu DEEPSEEK_API_KEY trong file .env (may chu)." }));
                 return;
             }
-            reply = await callDeepSeek({ apiKey: key, systemText, messages });
+            reply = await callDeepSeek({
+                apiKey: key,
+                systemText,
+                messages,
+                maxTokens: sqlMode ? deepTok : 4096,
+            });
         }
 
         res.writeHead(200);

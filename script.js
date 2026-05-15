@@ -24,6 +24,7 @@ const addSourceBtn = document.getElementById("addSourceBtn");
 const addSourceFile = document.getElementById("addSourceFile");
 const historyList = document.getElementById("historyList");
 const historyEmpty = document.getElementById("historyEmpty");
+const newChatBtn = document.getElementById("newChatBtn");
 const schemaSidebarEmpty = document.getElementById("schemaSidebarEmpty");
 const schemaTables = document.getElementById("schemaTables");
 const schemaUsersBtn = document.getElementById("schemaUsersBtn");
@@ -38,10 +39,12 @@ const API_URL = "http://localhost:5500/api/chat";
 const appData = { users: [], orders: [], products: [] };
 const chatHistory = [];
 const attachedFiles = []; // Lưu các file đã attach
-const PREVIEW_ROWS = 80;
 const MAX_HISTORY_MESSAGES = 14;
-const MAX_SIDEBAR_HISTORY_ITEMS = 12;
-const sidebarHistoryItems = [];
+const MAX_CHAT_CONVERSATIONS = 30;
+const CHAT_HISTORY_STORAGE_KEY = "dataChatConversationsV1";
+let chatConversations = [];
+let activeConversationId = null;
+let isRenderingConversation = false;
 
 function applyLocale() {
     const lang = getLang();
@@ -70,6 +73,7 @@ function applyLocale() {
 
     refreshLangButtons();
     applySchemaLabelsToUi();
+    updateSidebarHistoryUi();
 }
 
 function refreshLangButtons() {
@@ -145,6 +149,7 @@ function initApp() {
     // Send and clear buttons
     if (sendBtn) sendBtn.addEventListener("click", sendChat);
     if (clearBtn) clearBtn.addEventListener("click", clearChat);
+    if (newChatBtn) newChatBtn.addEventListener("click", () => createChatConversation({ activate: true }));
 
     // Attach file button
     if (attachBtn) {
@@ -179,6 +184,7 @@ function initApp() {
 
     // Init DB modal
     initDbModal();
+    loadChatConversations();
 
     // Initialize locale
     applyLocale();
@@ -200,33 +206,208 @@ function toggleSidebarSection(section) {
 function updateSidebarHistoryUi() {
     if (!historyList || !historyEmpty) return;
     historyList.innerHTML = "";
-    for (const title of sidebarHistoryItems) {
+    const ordered = chatConversations.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    for (const conversation of ordered) {
+        const row = document.createElement("div");
+        row.className = `history-row${conversation.id === activeConversationId ? " active" : ""}`;
+
         const btn = document.createElement("button");
-        btn.className = "sidebar-btn";
+        btn.className = "sidebar-btn history-chat-btn";
         btn.type = "button";
-        btn.title = t("historyClickHint");
+        btn.title = t("historyOpenHint");
         btn.innerHTML = `
             <i class="ti ti-message" aria-hidden="true"></i>
-            <span>${escapeHtml(title)}</span>
+            <span>${escapeHtml(conversation.title || t("untitledChat"))}</span>
         `;
         btn.addEventListener("click", () => {
-            inputTextarea.value = title;
-            inputTextarea.focus();
-            inputTextarea.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            switchChatConversation(conversation.id);
         });
-        historyList.appendChild(btn);
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "history-delete-btn";
+        deleteBtn.type = "button";
+        deleteBtn.title = t("deleteChatTitle");
+        deleteBtn.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
+        deleteBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            deleteChatConversation(conversation.id);
+        });
+
+        row.appendChild(btn);
+        row.appendChild(deleteBtn);
+        historyList.appendChild(row);
     }
-    historyEmpty.style.display = sidebarHistoryItems.length ? "none" : "block";
+    historyEmpty.style.display = chatConversations.length ? "none" : "block";
 }
 
-function addSidebarHistoryItem(text) {
+function makeConversationId() {
+    if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+    return `chat_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function getActiveConversation() {
+    return chatConversations.find((conversation) => conversation.id === activeConversationId) || null;
+}
+
+function buildChatTitle(text) {
     const title = String(text || "").trim();
-    if (!title) return;
-    sidebarHistoryItems.unshift(title);
-    if (sidebarHistoryItems.length > MAX_SIDEBAR_HISTORY_ITEMS) {
-        sidebarHistoryItems.length = MAX_SIDEBAR_HISTORY_ITEMS;
+    if (!title) return t("untitledChat");
+    return title.length > 54 ? `${title.slice(0, 51)}...` : title;
+}
+
+function saveChatConversations() {
+    try {
+        const payload = {
+            activeConversationId,
+            conversations: chatConversations.slice(0, MAX_CHAT_CONVERSATIONS),
+        };
+        localStorage.setItem(CHAT_HISTORY_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+        /* ignore localStorage quota/private mode */
+    }
+}
+
+function loadChatConversations() {
+    try {
+        const payload = JSON.parse(localStorage.getItem(CHAT_HISTORY_STORAGE_KEY) || "null");
+        const list = Array.isArray(payload?.conversations) ? payload.conversations : [];
+        chatConversations = list
+            .filter((conversation) => conversation && typeof conversation.id === "string")
+            .map((conversation) => ({
+                id: conversation.id,
+                title: conversation.title || t("untitledChat"),
+                createdAt: Number(conversation.createdAt) || Date.now(),
+                updatedAt: Number(conversation.updatedAt) || Date.now(),
+                messages: Array.isArray(conversation.messages) ? conversation.messages : [],
+                apiMessages: Array.isArray(conversation.apiMessages) ? conversation.apiMessages : [],
+            }))
+            .slice(0, MAX_CHAT_CONVERSATIONS);
+        activeConversationId = payload?.activeConversationId || chatConversations[0]?.id || null;
+    } catch {
+        chatConversations = [];
+        activeConversationId = null;
+    }
+    if (!getActiveConversation()) {
+        createChatConversation({ activate: true, persist: false });
+    } else {
+        renderActiveConversation();
     }
     updateSidebarHistoryUi();
+    saveChatConversations();
+}
+
+function createChatConversation({ activate = true, persist = true, title = "" } = {}) {
+    const now = Date.now();
+    const conversation = {
+        id: makeConversationId(),
+        title: title || t("untitledChat"),
+        createdAt: now,
+        updatedAt: now,
+        messages: [],
+        apiMessages: [],
+    };
+    chatConversations.unshift(conversation);
+    if (chatConversations.length > MAX_CHAT_CONVERSATIONS) {
+        chatConversations.length = MAX_CHAT_CONVERSATIONS;
+    }
+    if (activate) {
+        activeConversationId = conversation.id;
+        renderActiveConversation();
+        inputTextarea?.focus();
+    }
+    updateSidebarHistoryUi();
+    if (persist) saveChatConversations();
+    return conversation;
+}
+
+function switchChatConversation(id) {
+    if (id === activeConversationId) return;
+    activeConversationId = id;
+    renderActiveConversation();
+    updateSidebarHistoryUi();
+    saveChatConversations();
+}
+
+function deleteChatConversation(id) {
+    const idx = chatConversations.findIndex((conversation) => conversation.id === id);
+    if (idx < 0) return;
+    chatConversations.splice(idx, 1);
+    if (activeConversationId === id) {
+        activeConversationId = chatConversations[0]?.id || null;
+        if (!activeConversationId) {
+            createChatConversation({ activate: true, persist: false });
+        } else {
+            renderActiveConversation();
+        }
+    }
+    updateSidebarHistoryUi();
+    saveChatConversations();
+}
+
+function touchActiveConversation(titleText = "") {
+    let conversation = getActiveConversation();
+    if (!conversation) conversation = createChatConversation({ activate: true, persist: false });
+    const defaultTitles = new Set([t("untitledChat"), I18N_STRINGS.vi.untitledChat, I18N_STRINGS.en.untitledChat]);
+    if (titleText && (!conversation.title || defaultTitles.has(conversation.title))) {
+        conversation.title = buildChatTitle(titleText);
+    }
+    conversation.updatedAt = Date.now();
+    chatConversations = [conversation, ...chatConversations.filter((item) => item.id !== conversation.id)];
+    updateSidebarHistoryUi();
+    saveChatConversations();
+    return conversation;
+}
+
+function syncChatHistoryFromConversation(conversation) {
+    chatHistory.length = 0;
+    const apiMessages = Array.isArray(conversation?.apiMessages) ? conversation.apiMessages : [];
+    chatHistory.push(...apiMessages.slice(-MAX_HISTORY_MESSAGES));
+}
+
+function addConversationMessage(message) {
+    if (isRenderingConversation) return;
+    const conversation = touchActiveConversation();
+    conversation.messages.push({
+        ...message,
+        createdAt: Date.now(),
+    });
+    saveChatConversations();
+}
+
+function addConversationApiMessage(message) {
+    const conversation = touchActiveConversation();
+    conversation.apiMessages.push(message);
+    if (conversation.apiMessages.length > MAX_HISTORY_MESSAGES) {
+        conversation.apiMessages = conversation.apiMessages.slice(-MAX_HISTORY_MESSAGES);
+    }
+    syncChatHistoryFromConversation(conversation);
+    saveChatConversations();
+}
+
+function renderMessageRecord(message) {
+    if (!message || typeof message !== "object") return;
+    if (message.type === "user") appendUserBubble(message.text || "");
+    else if (message.type === "assistant") appendAssistantBubble(message.html || "");
+    else if (message.type === "error") appendErrorBubble(message.text || "");
+    else if (message.type === "system") appendSystemBubble(message.text || "");
+    else if (message.type === "sql") {
+        appendSqlPipelineBubble(message.sql || "", message.explanation || "", message.columns || [], message.rows || [], message.execErr || "");
+    }
+}
+
+function renderActiveConversation() {
+    const conversation = getActiveConversation();
+    chatArea.innerHTML = "";
+    syncChatHistoryFromConversation(conversation);
+    isRenderingConversation = true;
+    try {
+        for (const message of conversation?.messages || []) {
+            renderMessageRecord(message);
+        }
+    } finally {
+        isRenderingConversation = false;
+    }
+    scrollChat();
 }
 
 
@@ -317,6 +498,7 @@ function activateDataSource(id) {
     activeSourceId = id;
     const entry = dataSources.find((x) => x.id === id);
     syncAppDataFromSourceEntry(entry || null);
+    bumpSqlDataMutation();
     updateDbStatus();
     if (entry) {
         showStatus(tf("sourceSwitched", { name: entry.label }));
@@ -336,6 +518,7 @@ function replaceWorkspaceWithBundle(bundle, label, tableLabels) {
     appData.users = data.users;
     appData.orders = data.orders;
     appData.products = data.products;
+    bumpSqlDataMutation();
 }
 
 /** Thêm dữ liệu mới như một nguồn riêng biệt (không gộp). */
@@ -356,6 +539,7 @@ function addBundleAsNewSource(bundle, label, tableLabels) {
     appData.users = data.users;
     appData.orders = data.orders;
     appData.products = data.products;
+    bumpSqlDataMutation();
 }
 
 /** Hợp tất cả tên cột của hai tập dòng, mỗi dòng có đủ cột (thiếu → ""), tránh “mất” giá trị khi hai file khác schema. */
@@ -386,6 +570,56 @@ function mergeTableRowsUnionColumns(existing, incoming) {
     const keyList = [...new Set([...collectRowKeys(a), ...collectRowKeys(b)])];
     if (!a.length) return b.map((r) => normalizeRowToKeyList(r, keyList));
     return [...a.map((r) => normalizeRowToKeyList(r, keyList)), ...b.map((r) => normalizeRowToKeyList(r, keyList))];
+}
+
+const SQL_TABLE_ROLES = ["users", "orders", "products"];
+const SQL_SCHEMA_ERROR_MESSAGE = "Khong tim thay bang hoac cot phu hop trong du lieu da tai len.";
+
+const pipelineState = {
+    tables: [],
+};
+
+function quoteSqlIdentifier(name) {
+    return `"${String(name).replace(/"/g, '""')}"`;
+}
+
+function normalizeSqlNameForMatch(name) {
+    return String(name || "").trim().toLowerCase();
+}
+
+function fallbackSqlTableName(index) {
+    return `table_${index + 1}`;
+}
+
+function uniqueSqlTableName(baseName, usedNames, index) {
+    let base = String(baseName || "").trim();
+    if (!base) base = fallbackSqlTableName(index);
+    let candidate = base;
+    let suffix = 2;
+    while (usedNames.has(normalizeSqlNameForMatch(candidate))) {
+        candidate = `${base}_${suffix}`;
+        suffix++;
+    }
+    usedNames.add(normalizeSqlNameForMatch(candidate));
+    return candidate;
+}
+
+function getSqlPipelineTables() {
+    const usedNames = new Set();
+    const tables = [];
+    let visibleIndex = 0;
+    for (const role of SQL_TABLE_ROLES) {
+        const rows = appData[role];
+        if (!Array.isArray(rows) || !rows.length) continue;
+        const columns = [...collectRowKeys(rows)];
+        if (!columns.length) continue;
+        const label = getSchemaLabelForRole(role);
+        const name = uniqueSqlTableName(label, usedNames, visibleIndex);
+        tables.push({ name, role, columns, rowCount: rows.length });
+        visibleIndex++;
+    }
+    pipelineState.tables = tables;
+    return tables;
 }
 
 /** Gộp file mới vào nguồn đang chọn. Nếu chưa có dữ liệu thì tương đương nạp mới. */
@@ -428,6 +662,7 @@ function mergeBundleIntoActiveSource(bundle, fileLabel, tableLabels) {
         }
     }
     persistActiveSource();
+    bumpSqlDataMutation();
 }
 
 function renderDataSourcesList() {
@@ -542,6 +777,14 @@ function inferTableRoleFromFilename(filename) {
                 "donhang",
                 "hoadon",
                 "hoa_don",
+                "bang_diem",
+                "bangdiem",
+                "diem_so",
+                "diemso",
+                "ket_qua",
+                "ketqua",
+                "gpa",
+                "grades",
             ],
         ],
         ["products", ["products", "product_", "_products", "mon_hoc", "monhoc", "hoc_phan", "mat_hang", "course", "item", "hang"]],
@@ -668,7 +911,8 @@ function selectThreeSqliteTableNames(tableNames) {
     let ordersT =
         take((s) => s.includes("thanhtoan") || s.includes("thanh_toan")) ||
         take((s) => s.includes("hocphi") || s.includes("hoc_phi")) ||
-        take((s) => s.includes("payment") || s.includes("donhang") || s.includes("don_hang"));
+        take((s) => s.includes("payment") || s.includes("donhang") || s.includes("don_hang")) ||
+        take((s) => s.includes("bang_diem") || s.includes("bangdiem") || s.includes("ket_qua") || s.includes("ketqua"));
     let productsT =
         take((s) => s.includes("monhoc") || s.includes("mon_hoc")) ||
         take((s) => s.includes("nganhhoc") || s.includes("product") || s.includes("course"));
@@ -802,6 +1046,7 @@ function appendUserBubble(text) {
         <div class="msg-bubble">${escapeHtml(text)}</div>
     `;
     chatArea.appendChild(msgDiv);
+    addConversationMessage({ type: "user", text });
     scrollChat();
 }
 
@@ -813,6 +1058,7 @@ function appendAssistantBubble(html) {
         <div class="msg-bubble">${html}</div>
     `;
     chatArea.appendChild(msgDiv);
+    addConversationMessage({ type: "assistant", html });
     scrollChat();
 }
 
@@ -824,6 +1070,7 @@ function appendErrorBubble(message) {
         <div class="msg-bubble" style="background: #fee2e2; color: #dc2626; border-color: #fecaca;">${escapeHtml(message)}</div>
     `;
     chatArea.appendChild(msgDiv);
+    addConversationMessage({ type: "error", text: message });
     scrollChat();
 }
 
@@ -835,6 +1082,7 @@ function appendSystemBubble(text) {
         <div class="msg-bubble" style="background: var(--surface); border: 1px solid var(--border); font-style: italic;">${escapeHtml(text)}</div>
     `;
     chatArea.appendChild(msgDiv);
+    addConversationMessage({ type: "system", text });
     scrollChat();
 }
 
@@ -858,29 +1106,382 @@ function computeAggregates(rows) {
 }
 
 function buildDatasetForApi() {
-    const isTruncated = appData.users.length > PREVIEW_ROWS ||
-        appData.orders.length > PREVIEW_ROWS ||
-        appData.products.length > PREVIEW_ROWS;
     return {
         meta: {
             totalUsers: appData.users.length,
             totalOrders: appData.orders.length,
             totalProducts: appData.products.length,
-            previewRows: PREVIEW_ROWS,
-            isTruncated,
-            note: isTruncated
-                ? `Du lieu bi cat ngon tai ${PREVIEW_ROWS} dong/bang. Dung aggregates.* de tinh toan chinh xac tren toan bo du lieu.`
-                : null,
         },
         aggregates: {
             users: computeAggregates(appData.users),
             orders: computeAggregates(appData.orders),
             products: computeAggregates(appData.products),
         },
-        users: appData.users.slice(0, PREVIEW_ROWS),
-        orders: appData.orders.slice(0, PREVIEW_ROWS),
-        products: appData.products.slice(0, PREVIEW_ROWS),
+        users: appData.users,
+        orders: appData.orders,
+        products: appData.products,
     };
+}
+
+const SQL_FEW_SHOT_SAMPLE_ROWS = 10;
+
+function rowsFromSqlJsExecResult(res) {
+    if (!res || !res[0]) return [];
+    const { columns, values } = res[0];
+    return (values || []).map((row) => {
+        const o = {};
+        columns.forEach((c, i) => {
+            const v = row[i];
+            o[c] = v == null ? "" : typeof v === "bigint" ? String(v) : String(v);
+        });
+        return o;
+    });
+}
+
+/** Gửi API khi mode=sql: schema + ~10 dòng mẫu ngẫu nhiên + aggregates — không gửi toàn bộ bảng. */
+async function buildSqlFewShotDatasetForApi() {
+    const db = await ensureSqlExecDatabase();
+    const tables = getSqlPipelineTables();
+    let sampleTable = "";
+    let sampleRows = [];
+    if (tables.length) {
+        let best = tables[0];
+        for (const t of tables) {
+            if (t.rowCount > best.rowCount) best = t;
+        }
+        sampleTable = best.name;
+        const safe = String(sampleTable).replace(/"/g, '""');
+        const lim = Math.max(1, Math.min(20, SQL_FEW_SHOT_SAMPLE_ROWS));
+        const r = db.exec(`SELECT * FROM "${safe}" ORDER BY RANDOM() LIMIT ${lim}`);
+        sampleRows = rowsFromSqlJsExecResult(r);
+    }
+    const availableTables = tables.map((table) => `- ${table.name}(columns: ${table.columns.join(", ")})`).join("\n");
+    return {
+        meta: {
+            totalUsers: appData.users.length,
+            totalOrders: appData.orders.length,
+            totalProducts: appData.products.length,
+        },
+        aggregates: {
+            users: computeAggregates(appData.users),
+            orders: computeAggregates(appData.orders),
+            products: computeAggregates(appData.products),
+        },
+        schema: {
+            tables,
+            sample: { table: sampleTable, rows: sampleRows },
+            availableTables,
+        },
+        note: "Available tables above are the only valid SQLite tables. Use only listed table and column names. If no listed table/column matches the user request, return SELECT 1 WHERE 0 with an explanation instead of inventing names.",
+    };
+}
+
+const MAX_SQL_RESULT_DISPLAY_ROWS = 300;
+
+let sqlDataRevision = 0;
+let sqlExecDbCache = null;
+let sqlExecDbCacheRevision = -1;
+
+function bumpSqlDataMutation() {
+    sqlDataRevision++;
+    if (sqlExecDbCache) {
+        try {
+            sqlExecDbCache.close();
+        } catch {
+            /* ignore */
+        }
+        sqlExecDbCache = null;
+    }
+    sqlExecDbCacheRevision = -1;
+}
+
+async function ensureSqlExecDatabase() {
+    if (sqlExecDbCache && sqlExecDbCacheRevision === sqlDataRevision) {
+        return sqlExecDbCache;
+    }
+    const SQL = await loadSqlJsModule();
+    if (sqlExecDbCache) {
+        try {
+            sqlExecDbCache.close();
+        } catch {
+            /* ignore */
+        }
+        sqlExecDbCache = null;
+    }
+    const db = new SQL.Database();
+    const tables = getSqlPipelineTables();
+    for (const table of tables) {
+        const rows = appData[table.role];
+        if (!Array.isArray(rows) || !rows.length) continue;
+        const cols = table.columns;
+        if (!cols.length) continue;
+        const defs = cols.map((c) => `${quoteSqlIdentifier(c)} TEXT`).join(", ");
+        db.run(`CREATE TABLE ${quoteSqlIdentifier(table.name)} (${defs})`);
+        const placeholders = cols.map(() => "?").join(", ");
+        const stmt = db.prepare(`INSERT INTO ${quoteSqlIdentifier(table.name)} VALUES (${placeholders})`);
+        for (const r of rows) {
+            const vals = cols.map((c) => {
+                const v = r[c];
+                if (v == null) return "";
+                return typeof v === "bigint" ? String(v) : String(v);
+            });
+            stmt.run(vals);
+        }
+        stmt.free();
+    }
+    sqlExecDbCache = db;
+    sqlExecDbCacheRevision = sqlDataRevision;
+    return db;
+}
+
+function assertSqlSelectOnly(sql) {
+    const trimmed = String(sql || "").trim().replace(/;+\s*$/g, "").trim();
+    if (!trimmed) throw new Error(t("sqlUnsafeSql"));
+    const lower = trimmed.toLowerCase();
+    if (!lower.startsWith("select") && !lower.startsWith("with")) throw new Error(t("sqlUnsafeSql"));
+    if (/;\s*\S/.test(trimmed)) throw new Error(t("sqlUnsafeSql"));
+    if (/\b(insert|update|delete|drop|alter|pragma|attach|detach|create|truncate)\b/i.test(trimmed)) {
+        throw new Error(t("sqlUnsafeSql"));
+    }
+    return trimmed;
+}
+
+function stripSqlStringsAndComments(sql) {
+    return String(sql || "")
+        .replace(/--[^\r\n]*/g, " ")
+        .replace(/\/\*[\s\S]*?\*\//g, " ")
+        .replace(/'([^']|'')*'/g, "''")
+        .replace(/"([^"]|"")*"/g, (m) => m);
+}
+
+function extractCteNames(sql) {
+    const names = new Set();
+    const s = stripSqlStringsAndComments(sql).trim();
+    if (!/^with\b/i.test(s)) return names;
+    const re = /(?:with|,)\s*(?:"([^"]+)"|([A-Za-z_][\w$]*))\s*(?:\([^)]*\)\s*)?as\s*\(/gi;
+    let m;
+    while ((m = re.exec(s)) !== null) {
+        names.add(normalizeSqlNameForMatch(m[1] || m[2]));
+    }
+    return names;
+}
+
+function extractSqlTableReferences(sql) {
+    const refs = [];
+    const s = stripSqlStringsAndComments(sql);
+    const re = /\b(?:from|join)\s+(?:"([^"]+)"|`([^`]+)`|\[([^\]]+)\]|([A-Za-z_][\w$]*))(?!\s*\()/gi;
+    let m;
+    while ((m = re.exec(s)) !== null) {
+        const name = m[1] || m[2] || m[3] || m[4];
+        if (name) refs.push(name);
+    }
+    return refs;
+}
+
+function explainSqlSchemaError(err) {
+    const msg = err?.message || String(err || "");
+    const noTable = /no such table:\s*([^\r\n]+)/i.exec(msg);
+    if (noTable) return `${SQL_SCHEMA_ERROR_MESSAGE} Bang khong ton tai: ${noTable[1].trim()}.`;
+    const noColumn = /no such column:\s*([^\r\n]+)/i.exec(msg);
+    if (noColumn) return `${SQL_SCHEMA_ERROR_MESSAGE} Cot khong ton tai: ${noColumn[1].trim()}.`;
+    return msg || SQL_SCHEMA_ERROR_MESSAGE;
+}
+
+function validateSqlAgainstPipelineSchema(db, sql) {
+    const safe = assertSqlSelectOnly(sql);
+    const tables = getSqlPipelineTables();
+    const allowedTables = new Set(tables.map((table) => normalizeSqlNameForMatch(table.name)));
+    const cteNames = extractCteNames(safe);
+    const refs = extractSqlTableReferences(safe);
+    for (const ref of refs) {
+        const key = normalizeSqlNameForMatch(ref);
+        if (!allowedTables.has(key) && !cteNames.has(key)) {
+            throw new Error(`${SQL_SCHEMA_ERROR_MESSAGE} Bang khong ton tai: ${ref}.`);
+        }
+    }
+    try {
+        db.exec(`EXPLAIN QUERY PLAN ${safe}`);
+    } catch (e) {
+        throw new Error(explainSqlSchemaError(e));
+    }
+    return safe;
+}
+
+function extractSqlJsonFromReply(text) {
+    let raw = String(text || "").trim().replace(/^\uFEFF/, "");
+    raw = raw.replace(/^```(?:json)?\s*\r?\n?/im, "").replace(/\r?\n?```\s*$/im, "").trim();
+
+    function extractQuotedJsonField(src, fieldName) {
+        const esc = String(fieldName).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const re = new RegExp(`"${esc}"\\s*:\\s*"`, "i");
+        const m = re.exec(src);
+        if (!m) return null;
+        let i = m.index + m[0].length;
+        let out = "";
+        let escape = false;
+        for (; i < src.length; i++) {
+            const ch = src[i];
+            if (escape) {
+                if (ch === "n") out += "\n";
+                else if (ch === "t") out += "\t";
+                else if (ch === "r") out += "\r";
+                else if (ch === '"') out += '"';
+                else if (ch === "\\") out += "\\";
+                else if (ch === "/") out += "/";
+                else if (ch === "b") out += "\b";
+                else if (ch === "f") out += "\f";
+                else out += ch;
+                escape = false;
+                continue;
+            }
+            if (ch === "\\") {
+                escape = true;
+                continue;
+            }
+            if (ch === '"') return out;
+            out += ch;
+        }
+        return null;
+    }
+
+    function tryLenientSqlObject(s) {
+        if (!s || typeof s !== "string") return null;
+        const sql = extractQuotedJsonField(s, "sql");
+        if (sql == null || String(sql).trim() === "") return null;
+        let explanation = extractQuotedJsonField(s, "explanation");
+        if (explanation == null) explanation = "";
+        return { sql, explanation };
+    }
+
+    function tryParse(s) {
+        try {
+            const j = JSON.parse(s);
+            if (j && typeof j.sql === "string") return j;
+        } catch {
+            return null;
+        }
+        return null;
+    }
+
+    function extractBalancedObject(s, start) {
+        if (s[start] !== "{") return null;
+        let depth = 0;
+        let inString = false;
+        let escape = false;
+        for (let i = start; i < s.length; i++) {
+            const ch = s[i];
+            if (escape) {
+                escape = false;
+                continue;
+            }
+            if (inString) {
+                if (ch === "\\") {
+                    escape = true;
+                    continue;
+                }
+                if (ch === '"') inString = false;
+                continue;
+            }
+            if (ch === '"') {
+                inString = true;
+                continue;
+            }
+            if (ch === "{") depth += 1;
+            else if (ch === "}") {
+                depth -= 1;
+                if (depth === 0) return s.slice(start, i + 1);
+            }
+        }
+        return null;
+    }
+
+    function tryBalancedScan(s) {
+        let from = 0;
+        while (from < s.length) {
+            const start = s.indexOf("{", from);
+            if (start === -1) return null;
+            const slice = extractBalancedObject(s, start);
+            if (slice) {
+                try {
+                    const j = JSON.parse(slice);
+                    if (j && typeof j.sql === "string") return j;
+                } catch {
+                    /* continue */
+                }
+            }
+            from = start + 1;
+        }
+        return null;
+    }
+
+    let hit = tryParse(raw);
+    if (hit) return hit;
+
+    const reFence = /```(?:json)?\s*([\s\S]*?)```/gi;
+    let m;
+    while ((m = reFence.exec(raw)) !== null) {
+        const inner = String(m[1] || "").trim();
+        hit = tryParse(inner) || tryBalancedScan(inner) || tryLenientSqlObject(inner);
+        if (hit) return hit;
+    }
+
+    hit = tryBalancedScan(raw);
+    if (hit) return hit;
+
+    hit = tryLenientSqlObject(raw);
+    return hit || null;
+}
+
+function runClientSqlSelect(db, sql) {
+    const safe = validateSqlAgainstPipelineSchema(db, sql);
+    const res = db.exec(safe);
+    if (!res || !res.length) {
+        return { columns: [], rows: [] };
+    }
+    const { columns, values } = res[0];
+    return { columns: columns || [], rows: values || [] };
+}
+
+function appendSqlPipelineBubble(sql, explanation, columns, rowValues, execErr) {
+    const parts = [];
+    parts.push(`<h3 class="sql-pipeline-title">${escapeHtml(t("sqlHeading"))}</h3>`);
+    parts.push(`<pre class="sql-pipeline-pre"><code>${escapeHtml(sql)}</code></pre>`);
+    if (explanation) {
+        parts.push(`<p class="sql-pipeline-explain">${escapeHtml(explanation)}</p>`);
+    }
+    if (execErr) {
+        parts.push(`<p class="sql-pipeline-error">${escapeHtml(tf("sqlExecError", { msg: execErr }))}</p>`);
+    } else if (columns.length) {
+        parts.push(`<h3 class="sql-pipeline-title">${escapeHtml(t("sqlResultHeading"))}</h3>`);
+        parts.push('<div class="result-table-wrap"><table class="result-table"><thead><tr>');
+        for (const c of columns) parts.push(`<th>${escapeHtml(c)}</th>`);
+        parts.push("</tr></thead><tbody>");
+        const cap = Math.min(rowValues.length, MAX_SQL_RESULT_DISPLAY_ROWS);
+        for (let i = 0; i < cap; i++) {
+            const row = rowValues[i];
+            parts.push("<tr>");
+            for (let j = 0; j < columns.length; j++) {
+                const cell = row[j] == null ? "" : String(row[j]);
+                parts.push(`<td>${escapeHtml(cell)}</td>`);
+            }
+            parts.push("</tr>");
+        }
+        parts.push("</tbody></table></div>");
+        if (rowValues.length > cap) {
+            parts.push(`<p class="sql-pipeline-note">${escapeHtml(tf("sqlTruncatedRows", { shown: cap, total: rowValues.length }))}</p>`);
+        }
+    } else if (!execErr) {
+        parts.push(`<p class="sql-pipeline-note">${escapeHtml(t("sqlEmptyResult"))}</p>`);
+    }
+    const msgDiv = document.createElement("div");
+    msgDiv.className = "msg bot";
+    msgDiv.innerHTML = `
+        <div class="msg-avatar sql-pipeline-avatar">SQL</div>
+        <div class="msg-bubble sql-pipeline-bubble">${parts.join("")}</div>
+    `;
+    chatArea.appendChild(msgDiv);
+    addConversationMessage({ type: "sql", sql, explanation, columns, rows: rowValues.slice(0, MAX_SQL_RESULT_DISPLAY_ROWS), execErr });
+    scrollChat();
 }
 
 function trimHistory() {
@@ -901,23 +1502,26 @@ async function sendChat() {
     }
 
     appendUserBubble(text);
+    touchActiveConversation(text);
     inputTextarea.value = "";
-    chatHistory.push({ role: "user", content: text });
-    trimHistory();
-    addSidebarHistoryItem(text);
+    addConversationApiMessage({ role: "user", content: text });
 
     sendBtn.disabled = true;
     sendBtn.innerHTML = '<i class="ti ti-loader-2 spin"></i>';
     showStatus(t("statusCallingApi"));
 
+    const sqlPipelineOn = document.getElementById("sqlPipelineToggle")?.checked !== false;
+
     try {
+        const datasetPayload = sqlPipelineOn ? await buildSqlFewShotDatasetForApi() : buildDatasetForApi();
         const res = await fetch(API_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 provider: apiSelect.value,
-                messages: chatHistory.map((m) => ({ role: m.role, content: m.content })),
-                dataset: buildDatasetForApi(),
+                messages: chatHistory.slice(-MAX_HISTORY_MESSAGES).map((m) => ({ role: m.role, content: m.content })),
+                dataset: datasetPayload,
+                ...(sqlPipelineOn ? { mode: "sql" } : {}),
             }),
         });
         const data = await res.json().catch(() => ({}));
@@ -928,9 +1532,33 @@ async function sendChat() {
         if (typeof reply !== "string" || !reply.trim()) {
             throw new Error(t("statusEmptyReply"));
         }
-        appendAssistantBubble(renderAssistantHtml(reply));
-        chatHistory.push({ role: "assistant", content: reply });
-        trimHistory();
+        if (sqlPipelineOn) {
+            const parsed = extractSqlJsonFromReply(reply);
+            if (!parsed) {
+                throw new Error(t("sqlParseError"));
+            }
+            const db = await ensureSqlExecDatabase();
+            let columns = [];
+            let rowValues = [];
+            let execErr = "";
+            try {
+                const r = runClientSqlSelect(db, parsed.sql);
+                columns = r.columns;
+                rowValues = r.rows;
+            } catch (e) {
+                execErr = e.message || String(e);
+            }
+            const explain = typeof parsed.explanation === "string" ? parsed.explanation : "";
+            appendSqlPipelineBubble(parsed.sql, explain, columns, rowValues, execErr);
+            const histParts = [`SQL:\n${parsed.sql}`];
+            if (explain) histParts.push(explain);
+            if (execErr) histParts.push(`Lỗi:\n${execErr}`);
+            else histParts.push(`Kết quả: ${rowValues.length} dòng, ${columns.length} cột.`);
+            addConversationApiMessage({ role: "assistant", content: histParts.join("\n\n").slice(0, 12000) });
+        } else {
+            appendAssistantBubble(renderAssistantHtml(reply));
+            addConversationApiMessage({ role: "assistant", content: reply });
+        }
         showStatus(t("statusDone"));
     } catch (err) {
         const msg = err.message || String(err);
@@ -947,9 +1575,14 @@ function clearChat() {
     chatHistory.length = 0;
     chatArea.innerHTML = "";
     showStatus("");
+    const conversation = getActiveConversation() || createChatConversation({ activate: true, persist: false });
+    conversation.messages = [];
+    conversation.apiMessages = [];
+    conversation.title = t("untitledChat");
+    conversation.updatedAt = Date.now();
     appendSystemBubble(t("clearChatSystem"));
-    sidebarHistoryItems.length = 0;
     updateSidebarHistoryUi();
+    saveChatConversations();
 }
 
 function getFileIcon(fileName) {

@@ -34,6 +34,10 @@
       </select>
       <i class="ti ti-chevron-down" style="font-size:13px;color:var(--text3);" aria-hidden="true"></i>
     </div>
+    <label class="sql-pipeline-toggle">
+      <input type="checkbox" id="sqlPipelineToggle" checked />
+      <span data-i18n="sqlPipelineToggle">Few-shot SQL + chạy truy vấn</span>
+    </label>
   </header>
 
   <!-- SIDEBAR -->
@@ -46,6 +50,10 @@
     </button>
 
     <div class="sidebar-section" data-i18n="sidebarHistorySection">Lịch sử</div>
+    <button id="newChatBtn" class="sidebar-btn sidebar-new-chat" type="button">
+      <i class="ti ti-message-plus" aria-hidden="true"></i>
+      <span data-i18n="newChatBtn">Chat mới</span>
+    </button>
     <div id="historyList"></div>
     <div id="historyEmpty" class="sidebar-empty" data-i18n="historyEmpty">Chưa có lịch sử chat</div>
 
