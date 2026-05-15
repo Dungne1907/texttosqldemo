@@ -1,12 +1,10 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DataChat — README</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Lora:ital,wght@0,400;0,500;1,400;1,500&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+<!-- AUTO-GENERATED từ README.html — chạy: npm run build:readme -->
+<div align="center">
+
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="9600" viewBox="0 0 860 9600">
+<foreignObject width="860" height="9600">
+<div xmlns="http://www.w3.org/1999/xhtml" lang="vi">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&amp;family=Lora:ital,wght@0,400;0,500;1,400;1,500&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap"/><style>*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
     --bg: #0e0f11;
@@ -378,11 +376,7 @@
     font-size: 12px;
     color: var(--muted);
   }
-  .footer-brand span { color: var(--accent); }
-</style>
-</head>
-<body>
-<div class="page">
+  .footer-brand span { color: var(--accent); }</style><div class="page">
 
   <!-- HERO -->
   <header class="hero">
@@ -673,5 +667,8 @@
   </footer>
 
 </div>
-</body>
-</html>
+</div>
+</foreignObject>
+</svg>
+
+</div>

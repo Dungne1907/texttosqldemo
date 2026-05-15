@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "test": "node tests/sql-pipeline-validation.test.js"
+    "test": "node tests/sql-pipeline-validation.test.js",
+    "build:readme": "node scripts/build-readme-github.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0"
